@@ -208,7 +208,7 @@ def fit_func_simple(spec, noise_val,
 
     out = fit_isoturbHI_model_simple(vels, spec, vcent,
                                      delta_vcent=delta_vcent,
-                                     err=noise_val.value,
+                                     err=noise_val,
                                      verbose=False,
                                      plot_fit=False,
                                      return_model=False,
