@@ -7,6 +7,7 @@ import numpy as np
 from lmfit import Model, Parameters, Minimizer, report_fit
 import astropy.units as u
 import matplotlib.pyplot as plt
+from spectral_cube import OneDSpectrum
 
 sqrt2pi = np.sqrt(2 * np.pi)
 
@@ -165,3 +166,57 @@ def fit_isoturbHI_model_simple(vels, spec, vcent, delta_vcent=5 * u.km / u.s,
         return out, vels.value, model
 
     return out
+
+
+def fit_func_simple(spec, noise_val,
+                    vcent=None,
+                    min_finite_chan=30,
+                    downsamp_factor=1,
+                    max_comp=10,
+                    delta_vcent=5 * u.km / u.s):
+    '''
+    Wrapper function to work in parallelized map.
+    Fits with fit_isoturbHI_model_simple.
+    '''
+
+    params_array = np.zeros((4,)) * np.NaN
+    uncerts_array = np.zeros((4,)) * np.NaN
+
+    if np.isfinite(spec.filled_data[:]).sum() < min_finite_chan:
+
+        return params_array, uncerts_array, np.NaN
+
+    # Downsample if needed
+    if downsamp_factor > 1:
+        new_width = np.diff(spec.spectral_axis)[0] * 2
+        new_axis = np.arange(spec.spectral_axis.value[0],
+                             spec.spectral_axis.value[-1],
+                             new_width.value) * new_width.unit
+        spec_conv = OneDSpectrum(spec.filled_data[:],
+                                 wcs=spec.wcs)
+        spec_conv = spec_conv.spectral_interpolate(new_axis)
+
+        noise_val /= np.sqrt(downsamp_factor)
+
+    elif downsamp_factor < 1:
+        raise ValueError("Cannot upsample data.")
+    else:
+        spec_conv = spec
+
+    # The function converts to km/s. Don't need to do it twice.
+    vels = spec.spectral_axis
+
+    out = fit_isoturbHI_model_simple(vels, spec, vcent,
+                                     delta_vcent=delta_vcent,
+                                     err=noise_val.value,
+                                     verbose=False,
+                                     plot_fit=False,
+                                     return_model=False,
+                                     use_emcee=False,)
+
+    params_array = np.array([par.value for par in out.pars.values()])
+    uncerts_array = np.array([par.stderr if par.stderr is not None
+                              else np.NaN
+                              for par in out.pars.values()])
+
+    return params_array, uncerts_array, out.bic
