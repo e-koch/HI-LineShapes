@@ -1,8 +1,17 @@
 
 '''
-Individual spectrum fitter for comparison.
+Individual spectrum fitter for comparison. There are a few different
+approaches here:
 
-Very simple: add gaussian components until a min. in AIC or BIC is found.
+- add gaussian components until a min. in AIC or BIC is found. Issues without
+good starting guesses
+- use AGD from gausspy to make initial guesses by looping over smoothing
+lengths; remove components until all the integral over each component
+is >N-sigma.
+
+The latter method tends to be better at producing good models for the M31
+spectra.
+However, it likely overfits in some cases.
 '''
 
 import numpy as np
