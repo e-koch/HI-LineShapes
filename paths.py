@@ -20,18 +20,21 @@ def name_return_check(filename, path, no_check=False):
 if socket.gethostname() == 'ewk':
     root = os.path.expanduser('~/ownCloud/project_code/ThickHIFitting/')
     m31_data_path = "/home/eric/cirrus/bigdata/ekoch/M31/"
+    m33_data_path = "/home/eric/cirrus/bigdata/ekoch/M31/"
 elif "segfault" == socket.gethostname():
     root = os.path.expanduser("~/ownCloud/project_code/ThickHIFitting/")
     m31_data_path = "/mnt/bigdata/ekoch/M31"
+    m33_data_path = "/mnt/bigdata/ekoch/M33"
 # elif "cedar.computecanada" in socket.gethostname():
 #     root = "/home/ekoch/code/LocalGroup-VLA/"
 #     m31_data_path = "/home/ekoch/project/ekoch/"
 elif 'ewk-laptop' in socket.gethostname():
     root = os.path.expanduser("~/ownCloud/project_code/ThickHIFitting/")
     m31_data_path = os.path.expanduser("~/storage/M31")
+    m33_data_path = os.path.expanduser("~/storage/M33")
 
 
-# Data paths
+# M31 data paths
 fourteenA_HI_data_path = \
     partial(name_return_check,
             path=os.path.join(m31_data_path, "VLA/14A-235/HI/full_imaging_noSD/"))
@@ -57,6 +60,24 @@ fifteenA_HI_BCtaper_04kms_data_wEBHIS_path = \
 ebhis_m31_HI_data_path = \
     partial(name_return_check,
             path=os.path.join(m31_data_path, "EBHIS/"))
+
+# M33 data paths
+fourteenB_HI_data_path = \
+    partial(name_return_check,
+            path=os.path.join(m33_data_path, "VLA/14B-088/HI/full_imaging_noSD/"))
+fourteenB_HI_data_wGBT_path = \
+    partial(name_return_check,
+            path=os.path.join(m33_data_path, "VLA/14B-088/HI/full_imaging_wGBT/"))
+
+
+seventeenB_HI_data_1kms_path = \
+    partial(name_return_check,
+            path=os.path.join(m33_data_path,
+                              "VLA/17B-162/HI/full_imaging_1kms_noSD/"))
+seventeenB_HI_data_1kms_wGBT_path = \
+    partial(name_return_check,
+            path=os.path.join(m33_data_path,
+                              "VLA/17B-162/HI/full_imaging_1kms_wGBT/"))
 
 
 # Proposal Figures
@@ -119,6 +140,17 @@ fifteenA_HI_BCtaper_file_dict = \
   find_dataproduct_names(fifteenA_HI_BCtaper_04kms_data_path("", no_check=True))
 fifteenA_HI_BCtaper_wEBHIS_HI_file_dict = \
   find_dataproduct_names(fifteenA_HI_BCtaper_04kms_data_wEBHIS_path("", no_check=True))
+
+fourteenB_HI_file_dict = \
+    find_dataproduct_names(fourteenB_HI_data_path("", no_check=True))
+fourteenB_wGBT_HI_file_dict = \
+    find_dataproduct_names(fourteenB_HI_data_wGBT_path("", no_check=True))
+
+seventeenB_1kms_HI_file_dict = \
+    find_dataproduct_names(seventeenB_HI_data_1kms_path("", no_check=True))
+seventeenB_1kms_wGBT_HI_file_dict = \
+    find_dataproduct_names(seventeenB_HI_data_1kms_wGBT_path("",
+                                                             no_check=True))
 
 if __name__ == "__main__":
 
