@@ -214,9 +214,9 @@ def fit_func_simple(spec, noise_val,
                                      return_model=False,
                                      use_emcee=False,)
 
-    params_array = np.array([par.value for par in out.pars.values()])
+    params_array = np.array([par.value for par in out.params.values()])
     uncerts_array = np.array([par.stderr if par.stderr is not None
                               else np.NaN
-                              for par in out.pars.values()])
+                              for par in out.params.values()])
 
     return params_array, uncerts_array, out.bic
