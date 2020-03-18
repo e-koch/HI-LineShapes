@@ -9,6 +9,7 @@
 
 # Standard Libs
 import time
+from copy import copy
 
 # Standard Third Party
 import numpy as np
@@ -18,10 +19,12 @@ from lmfit import Parameters
 
 import matplotlib.pyplot as plt
 from numpy.linalg import lstsq
+# from scipy.optimize import lsq_linear
 from scipy.ndimage.filters import median_filter, convolve
 import scipy.ndimage as nd
 
-from gausspyplus.gausspy_py3.gp_plus import try_to_improve_fitting, goodness_of_fit
+from gausspyplus.gausspy_py3.gp_plus import (try_to_improve_fitting,
+                                             goodness_of_fit)
 # from .gp_plus import try_to_improve_fitting, goodness_of_fit
 
 # Python Regularized derivatives
@@ -277,9 +280,6 @@ def initialGuess(vel, data, errors=None, alpha=None, plot=False, mode='conv',
                  'thresh': thresh, 'N_components': N_components}
 
         return odict
-
-#        say('AGD2.initialGuess: No components found for alpha={0}! Returning ([] [] [] [] [])'.format(alpha))
-#        return [], [], [], u2
 
     # Find points of inflection
     # inflection = np.abs(np.diff(np.sign(u2)))
@@ -845,7 +845,7 @@ def AGD_loop(spec, errors,
         # Search for phase-two guesses
         agd2 = initialGuess(vel, residuals,
                             # Adjust error after median window average.
-                            errors=errors[0] / np.sqrt(alpha / 2.),
+                            errors=errors[0],  #  / np.sqrt(alpha / 2.),
                             alpha=alpha,
                             mode=mode, verbose=verbose,
                             SNR_thresh=SNR_thresh2, BLFrac=BLFrac,
@@ -870,6 +870,7 @@ def AGD_loop(spec, errors,
         # Check for phase two components, make final guess list
         # ------------------------------------------------------
         if ncomps_g2 > 0:
+
             amps_gf = np.append(params_f1[0:ncomps_f1],
                                 params_g2[0:ncomps_g2])
             widths_gf = np.append(params_f1[ncomps_f1:2 * ncomps_f1],
@@ -884,7 +885,7 @@ def AGD_loop(spec, errors,
             if deblend:
                 FF_matrix = np.zeros([len(amps_gf), len(amps_gf)])
                 for i, j in np.ndindex(FF_matrix.shape):
-                    FF_matrix[i, j] = np.exp(-(offsets_gf[i]-offsets_gf[j])**2/2./(widths_gf[j] / 2.355)**2)
+                    FF_matrix[i, j] = np.exp(-(offsets_gf[j] - offsets_gf[i])**2/2./(widths_gf[j] / 2.355)**2)
                 amps_new = lstsq(FF_matrix, amps_gf, rcond=None)[0]
                 if np.all(amps_new > 0):
                     amps_gf = amps_new
@@ -1049,6 +1050,7 @@ def AGD_loop(spec, errors,
         def comp_sig(amp, fwhm):
             return (amp * fwhm) / (errors[0] * alphas[0] * 2.35)
 
+        has_prev = False
         while True:
 
             # Objective functions for final fit
@@ -1065,6 +1067,7 @@ def AGD_loop(spec, errors,
             result2 = lmfit_minimize(objective_leastsq, lmfit_params,
                                      method='leastsq',
                                      maxfev=int(1e4) * spec.size)
+
             params_fit = vals_vec_from_lmfit(result2.params)
             params_errs = errs_vec_from_lmfit(result2.params)
 
@@ -1075,18 +1078,53 @@ def AGD_loop(spec, errors,
 
             say(f"Component sig: {component_signif}", verbose)
 
-            if (component_signif >= component_sigma).all():
+            if not (component_signif >= component_sigma).all():
                 # All good. Continue with this fit.
+                comp_del = np.argmin(component_signif)
+
+                say(f"Removing component {comp_del}; below"
+                    " significance threshold", verbose)
+
+                params_gf = np.delete(params_gf, 2 * ncomps_fit + comp_del)
+                params_gf = np.delete(params_gf, ncomps_fit + comp_del)
+                params_gf = np.delete(params_gf, comp_del)
+                continue
+
+            if not has_prev:
+                last_result = copy(result2)
+                has_prev = True
+                continue
+
+            # Compare BIC with previous. Remove components
+            # until BIC jumps with a difference >10.
+            bic_diff = result2.bic - last_result.bic
+            say(f"Previous BIC: {last_result.bic} "
+                f"Current BIC: {result2.bic} "
+                f"Difference: {bic_diff}.",
+                verbose)
+            if bic_diff > 10:
+                # Result to previous fit.
+                result2 = last_result
+                say(f"Converged with {len(result2.params) // 3} components.",
+                    verbose)
                 break
 
-            comp_del = np.argmin(component_signif)
+            last_result = copy(result2)
 
-            say(f"Removing component {comp_del}; below"
-                " significance threshold", verbose)
+            component_signif = comp_sig(params_fit[:ncomps_fit],
+                                        params_fit[ncomps_fit: 2 * ncomps_fit])
+            comp_del = np.argmin(component_signif)
 
             params_gf = np.delete(params_gf, 2 * ncomps_fit + comp_del)
             params_gf = np.delete(params_gf, ncomps_fit + comp_del)
             params_gf = np.delete(params_gf, comp_del)
+            say(f"Reducing to {ncomps_fit} components.", verbose)
+
+        # Final fit parameters
+        params_fit = vals_vec_from_lmfit(result2.params)
+        params_errs = errs_vec_from_lmfit(result2.params)
+
+        ncomps_fit = len(params_fit) // 3
 
         fit_results = result2
 
@@ -1099,27 +1137,8 @@ def AGD_loop(spec, errors,
         best_fit_final = np.zeros_like(data)
         ncomps_fit = 0
 
-    # Try to improve the fit
-    # ----------------------
-    # if dct['improve_fitting']:
-    #     if ncomps_gf == 0:
-    #         ncomps_fit = 0
-    #         params_fit = []
-    #     #  TODO: check if ncomps_fit should be ncomps_gf
-    #     best_fit_list, N_neg_res_peak, N_blended, log_gplus =\
-    #         try_to_improve_fitting(
-    #             vel, data, errors, params_fit, ncomps_fit, dct,
-    #             signal_ranges=signal_ranges,
-    #             noise_spike_ranges=noise_spike_ranges)
-
-    #     params_fit, params_errs, ncomps_fit, best_fit_final, residual,\
-    #         rchi2, aicc, new_fit, params_min, params_max, pvalue, \
-    #         quality_control = best_fit_list
-
-    #     ncomps_gf = ncomps_fit
-
     if plot:
-        #                       P L O T T I N G
+        # P L O T T I N G
         datamax = np.max(data)
         try:
             print(("params_fit:", params_fit))
@@ -1130,10 +1149,6 @@ def AGD_loop(spec, errors,
             ncomps_fit = 0
             best_fit_final = data * 0
 
-        # if dct['improve_fitting']:
-        #     rchi2 = best_fit_list[5]
-        # else:
-        #     #  TODO: define mask from signal_ranges
         rchi2 = goodness_of_fit(data, best_fit_final, errors, ncomps_fit)
 
         # Set up figure
@@ -1141,9 +1156,9 @@ def AGD_loop(spec, errors,
 
         # Decorations
         plt.figtext(0.75, 0.75, 'Final fit (GaussPy)')
-        if perform_final_fit:
-            plt.figtext(0.75, 0.73, 'Reduced Chi2: {0:3.3f}'.format(rchi2))
-            plt.figtext(0.75, 0.71, 'N components: {0}'.format(ncomps_fit))
+        # if perform_final_fit:
+        plt.figtext(0.75, 0.73, 'Reduced Chi2: {0:3.3f}'.format(rchi2))
+        plt.figtext(0.75, 0.71, 'N components: {0}'.format(ncomps_fit))
 
         ax.yaxis.tick_right()
         ax.axhline(color='black', linewidth=0.5)
