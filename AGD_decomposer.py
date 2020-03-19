@@ -845,7 +845,7 @@ def AGD_loop(spec, errors,
         # Search for phase-two guesses
         agd2 = initialGuess(vel, residuals,
                             # Adjust error after median window average.
-                            errors=errors[0],  #  / np.sqrt(alpha / 2.),
+                            errors=errors[0] / np.sqrt(alpha / 4.),
                             alpha=alpha,
                             mode=mode, verbose=verbose,
                             SNR_thresh=SNR_thresh2, BLFrac=BLFrac,
@@ -1107,6 +1107,10 @@ def AGD_loop(spec, errors,
                 result2 = last_result
                 say(f"Converged with {len(result2.params) // 3} components.",
                     verbose)
+                break
+
+            if len(result2.params) // 3 == 1:
+                # Exit with one component
                 break
 
             last_result = copy(result2)
