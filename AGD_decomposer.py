@@ -1095,6 +1095,11 @@ def AGD_loop(spec, errors,
                 has_prev = True
                 continue
 
+            # Are we out of components?
+            if len(component_signif) == 0:
+                result2 = last_result
+                break
+
             # Compare BIC with previous. Remove components
             # until BIC jumps with a difference >10.
             bic_diff = result2.bic - last_result.bic
