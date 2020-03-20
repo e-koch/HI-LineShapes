@@ -691,7 +691,8 @@ def AGD_loop(spec, errors,
              perform_final_fit=True,
              intermediate_fit=False,
              use_detect_wings=False,
-             component_sigma=5.):
+             component_sigma=5.,
+             min_bic_diff=10.):
     """ Autonomous Gaussian Decomposition."""
 
     if len(alphas) == 0:
@@ -871,14 +872,44 @@ def AGD_loop(spec, errors,
         # ------------------------------------------------------
         if ncomps_g2 > 0:
 
+            # Check the similarity between components. If two components are
+            # nearly identical, it is often from deblending failing in
+            # previous iterations.
+            # Deblending is a lot harder to fix (it's only linear if solving
+            # for amplitudes only) so we'll "fix" it here.
+            widths1 = params_f1[ncomps_f1:2 * ncomps_f1]
+            offsets1 = params_f1[2 * ncomps_f1:3 * ncomps_f1]
+
+            amps2 = params_g2[0:ncomps_g2].copy()
+            widths2 = params_g2[ncomps_g2:2 * ncomps_g2].copy()
+            offsets2 = params_g2[2 * ncomps_g2:3 * ncomps_g2].copy()
+
+            del_match_idx = check_matching_component(widths1, offsets1,
+                                                     widths2, offsets2,
+                                                     5.,
+                                                     verbose=verbose)
+
+            # Remove the unneeded components.
+            for idx in del_match_idx:
+                amps2 = np.delete(amps2, idx)
+                widths2 = np.delete(widths2, idx)
+                offsets2 = np.delete(offsets2, idx)
+                say(f"Removing duplicate component {idx}", verbose)
+
             amps_gf = np.append(params_f1[0:ncomps_f1],
-                                params_g2[0:ncomps_g2])
+                                amps2)
             widths_gf = np.append(params_f1[ncomps_f1:2 * ncomps_f1],
-                                  params_g2[ncomps_g2:2 * ncomps_g2])
+                                  widths2)
             offsets_gf = np.append(params_f1[2 * ncomps_f1:3 * ncomps_f1],
-                                   params_g2[2 * ncomps_g2:3 * ncomps_g2])
+                                   offsets2)
+
             params_gf = np.concatenate([amps_gf, widths_gf, offsets_gf])
             ncomps_gf = int(len(params_gf) / 3)
+
+            # Don't re-do deblending if no new components were added.
+            # It tends not to be stable when repeated from my tests
+            if len(amps2) == 0:
+                continue
 
             # Attempt deblending.
             # If Deblending results in all non-negative answers, keep.
@@ -1051,6 +1082,7 @@ def AGD_loop(spec, errors,
             return (amp * fwhm) / (errors[0] * alphas[0] * 2.35)
 
         has_prev = False
+        has_comp_sig_check = False
         while True:
 
             # Objective functions for final fit
@@ -1078,7 +1110,10 @@ def AGD_loop(spec, errors,
 
             say(f"Component sig: {component_signif}", verbose)
 
-            if not (component_signif >= component_sigma).all():
+            check_sig = not (component_signif >= component_sigma).all() and \
+                 not has_comp_sig_check
+
+            if check_sig:
                 # All good. Continue with this fit.
                 comp_del = np.argmin(component_signif)
 
@@ -1089,6 +1124,9 @@ def AGD_loop(spec, errors,
                 params_gf = np.delete(params_gf, ncomps_fit + comp_del)
                 params_gf = np.delete(params_gf, comp_del)
                 continue
+
+            # Switch to the BIC check from here.
+            has_comp_sig_check = True
 
             if not has_prev:
                 last_result = copy(result2)
@@ -1107,7 +1145,7 @@ def AGD_loop(spec, errors,
                 f"Current BIC: {result2.bic} "
                 f"Difference: {bic_diff}.",
                 verbose)
-            if bic_diff > 10:
+            if bic_diff > min_bic_diff:
                 # Result to previous fit.
                 result2 = last_result
                 say(f"Converged with {len(result2.params) // 3} components.",
@@ -1142,6 +1180,7 @@ def AGD_loop(spec, errors,
         best_fit_final = func(vel, *params_fit).ravel()
 
     else:
+        say("No components found.", verbose)
         fit_results = None
         best_fit_final = np.zeros_like(data)
         ncomps_fit = 0
@@ -1320,19 +1359,42 @@ def gaussian_overlap(vels, params1, params2):
     return True
 
 
-def cluster_components(params, ncomp, data_shape):
+# def cluster_components(params, ncomp, data_shape):
+#     '''
+#     Cluster the components based on:
+
+#     min [comp1_i - comp2_j]**2
+
+#     Basically minimize the difference between neighbouring
+#     components.
+#     '''
+
+#     # Make a copy of the params that we'll populate.
+#     clustered_params = params.copy()
+
+#     comp1 = gaussian(params1[0], params1[1], params1[2])(vels)
+#     comp2 = gaussian(params2[0], params2[1], params2[2])(vels)
+
+def check_matching_component(offsets1, widths1, offsets2, widths2,
+                             alpha, verbose=False):
     '''
-    Cluster the components based on:
-
-    min [comp1_i - comp2_j]**2
-
-    Basically minimize the difference between neighbouring
-    components.
+    Check for components with similar offset and width.
     '''
 
-    # Make a copy of the params that we'll populate.
-    clustered_params = params.copy()
+    idx_to_remove = []
 
-    comp1 = gaussian(params1[0], params1[1], params1[2])(vels)
-    comp2 = gaussian(params2[0], params2[1], params2[2])(vels)
+    for idx2 in range(len(offsets2)):
+        for idx1 in range(len(offsets1)):
 
+            cent_check = abs(offsets1[idx1] - offsets2[idx2]) < alpha
+
+            width_check = abs(widths1[idx1] - widths2[idx2]) < alpha
+
+            if cent_check and width_check:
+                say(f"Centroid match: {offsets1[idx1]} and {offsets2[idx2]}",
+                    verbose)
+                say(f"FWHM match: {widths1[idx1]} and {widths2[idx2]}",
+                    verbose)
+                idx_to_remove.append(idx2)
+
+    return np.unique(idx_to_remove)[::-1]
