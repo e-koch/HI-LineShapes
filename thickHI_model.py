@@ -133,15 +133,28 @@ def fit_isoturbHI_model_simple(vels, spec, vcent, delta_vcent=5 * u.km / u.s,
     pfit.add(name='vcent', value=vcent.to(vels.unit).value,
              min=vel_min, max=vel_max)
 
+    finite_mask = np.isfinite(spec.filled_data[:])
+
+    # Some cases are failing with a TypeError due to a lack
+    # of data. This really shouldn't happen, but I'll throw in this
+    # to catch those cases.
+    if finite_mask.sum() <= 4:
+        return None
+
     if err is not None:
-        fcn_args = (vels.value, spec.value, err.value)
+        fcn_args = (vels[finite_mask].value, spec[finite_mask].value,
+                    err.value)
     else:
-        fcn_args = (vels.value, spec.value, 1.)
+        fcn_args = (vels[finite_mask].value, spec[finite_mask].value, 1.)
 
-    mini = Minimizer(residual, pfit, fcn_args=fcn_args,
-                     maxfev=vels.size * 1000)
+    try:
+        mini = Minimizer(residual, pfit, fcn_args=fcn_args,
+                         maxfev=vels.size * 1000,
+                         nan_policy='omit')
 
-    out = mini.leastsq()
+        out = mini.leastsq()
+    except TypeError:
+        return None
 
     if use_emcee:
         mini = Minimizer(residual, out.params,
@@ -206,13 +219,22 @@ def fit_func_simple(spec, noise_val,
     # The function converts to km/s. Don't need to do it twice.
     vels = spec.spectral_axis
 
-    out = fit_isoturbHI_model_simple(vels, spec, vcent,
-                                     delta_vcent=delta_vcent,
-                                     err=noise_val,
-                                     verbose=False,
-                                     plot_fit=False,
-                                     return_model=False,
-                                     use_emcee=False,)
+    # Still trying to catch this weird edge case with <4 finite
+    # points to fit to.
+    try:
+        out = fit_isoturbHI_model_simple(vels, spec, vcent,
+                                         delta_vcent=delta_vcent,
+                                         err=noise_val,
+                                         verbose=False,
+                                         plot_fit=False,
+                                         return_model=False,
+                                         use_emcee=False,)
+    except TypeError:
+        out = None
+
+    # Too few points to fit
+    if out is None:
+        return params_array, uncerts_array, np.NaN
 
     params_array = np.array([par.value for par in out.params.values()])
     uncerts_array = np.array([par.stderr if par.stderr is not None
