@@ -11,7 +11,7 @@ def default_figure(font_scale=1.0):
            palette='colorblind',
            font='Times New Roman', style='ticks',
            rc={'text.usetex': True,
-               "origin": "lower"},)
+               "image.origin": "lower"},)
 
 
 def fullpage_figure(font_scale=1.25):
@@ -25,7 +25,7 @@ def fullpage_figure(font_scale=1.25):
     sb.set("paper", font_scale=font_scale,
            rc={"figure.figsize": figsize,
                'text.usetex': True,
-               "origin": "lower"},
+               "image.origin": "lower"},
            palette='colorblind',
            font='Times New Roman', style='ticks')
 
@@ -45,7 +45,7 @@ def twocolumn_figure(fig_ratio=None, font_scale=1.25):
     sb.set("paper", font_scale=font_scale,
            rc={"figure.figsize": figsize,
                'text.usetex': True,
-               "origin": "lower"},
+               "image.origin": "lower"},
            palette='colorblind',
            font='Times New Roman', style='ticks')
 
@@ -78,7 +78,7 @@ def onecolumn_figure(fig_ratio=None, font_scale=1.2):
     sb.set("paper", font_scale=font_scale,
            rc={"figure.figsize": figsize,
                'text.usetex': True,
-               "origin": "lower"},
+               "image.origin": "lower"},
            palette='colorblind',
            font='Times New Roman', style='ticks')
     # sb.set_palette("colorblind")
