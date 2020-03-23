@@ -2,3 +2,5 @@
 *.sublime-project
 *.workspace
 __pycache__
+figures/png
+figures/pdf
