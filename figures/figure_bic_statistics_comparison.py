@@ -305,3 +305,23 @@ ax.grid()
 
 save_figure(fig, 'm31_delta_bic_hist_tau_steps')
 plt.close()
+
+
+# Make a box plot of the peak tau vs. number of Gaussians
+
+# Remove 0
+ngausses = np.unique(m31_ngauss[thick_mask])[1:]
+
+data = [peaktau_map[thick_mask & (m31_ngauss == nc)] for nc in ngausses]
+
+fig = plt.figure()
+
+ax = fig.add_subplot()
+
+_ = ax.boxplot(data)
+
+ax.set_ylabel(r"$\tau_0$")
+ax.set_xlabel("Number of Gaussians")
+
+save_figure(fig, 'm31_tau_ngauss_boxplot')
+plt.close()
