@@ -134,7 +134,10 @@ def fit_isoturbHI_model_simple(vels, spec, vcent, delta_vcent=5 * u.km / u.s,
     pfit.add(name='vcent', value=vcent.to(vels.unit).value,
              min=vel_min, max=vel_max)
 
-    finite_mask = np.isfinite(spec.filled_data[:])
+    try:
+        finite_mask = np.isfinite(spec.filled_data[:])
+    except AttributeError:
+        finite_mask = np.isfinite(spec)
 
     # Some cases are failing with a TypeError due to a lack
     # of data. This really shouldn't happen, but I'll throw in this
