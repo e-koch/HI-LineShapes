@@ -196,9 +196,10 @@ for params in tqdm(product(tpeaks, tss, sigmas),
 
 # Convert list of results into a table and save as a CSV
 
-tab = Table(fit_results, names=['Tpeak', 'Ts', 'sigma',
-                                'p_Tpeak', 'p_Ts', 'p_sigma',
-                                'delta_BIC_mean', 'delta_BIC_std'])
+tab = Table(np.array(fit_results),
+            names=['Tpeak', 'Ts', 'sigma',
+                   'p_Tpeak', 'p_Ts', 'p_sigma',
+                   'delta_BIC_mean', 'delta_BIC_std'])
 
 output_name = 'm31_synthetic_thickHI_recovery.csv'
 tab.write(osjoin(output_path, output_name))
@@ -275,9 +276,9 @@ for params in tqdm(product(tpeaks, tss, sigmas),
 
 # Convert list of results into a table and save as a CSV
 
-tab = Table(fit_results, names=['Tpeak', 'Ts', 'sigma',
-                                'p_Tpeak', 'p_Ts', 'p_sigma',
-                                'delta_BIC_mean', 'delta_BIC_std'])
-
+tab = Table(np.array(fit_results),
+            names=['Tpeak', 'Ts', 'sigma',
+                   'p_Tpeak', 'p_Ts', 'p_sigma',
+                   'delta_BIC_mean', 'delta_BIC_std'])
 output_name = 'm33_synthetic_thickHI_recovery.csv'
 tab.write(osjoin(output_path, output_name))
