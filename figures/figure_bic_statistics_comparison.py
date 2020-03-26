@@ -85,13 +85,14 @@ cts, bin_edges = astro_hist(diff_bic.value[np.isfinite(diff_bic)],
                             bins='knuth')
 bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
 
-ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All')
+ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All',
+            linewidth=2, color='k')
 
 ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
 ax.set_ylabel("Number of Spectra")
 
-ax.axvline(-10., color='k', linestyle='--')
-ax.axvline(10., color='k', linestyle='--')
+# ax.axvline(-10., color='k', linestyle='--')
+# ax.axvline(10., color='k', linestyle='--')
 
 ax.text(-80, 2e5, "Gaussian model\npreferred",
         verticalalignment='center',
@@ -103,7 +104,7 @@ ax.text(80, 2e5, "Optically-thick model\npreferred",
 # Now split by number of gaussians
 # Max is 8. We'll do each number up to 5, then >5
 
-for nc in range(1, 5):
+for nc, lstyle in zip(range(1, 5), linestyles_list):
 
     comp_mask = np.logical_and(np.isfinite(diff_bic),
                                m31_ngauss == nc)
@@ -112,7 +113,8 @@ for nc in range(1, 5):
                      bins=bin_edges)[0]
 
     ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-                label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian")
+                label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
+                linestyle=lstyle)
 # "the rest"
 comp_mask = np.logical_and(np.isfinite(diff_bic),
                            m31_ngauss >= 5)
@@ -121,7 +123,8 @@ cts = astro_hist(diff_bic.value[comp_mask],
                  bins=bin_edges)[0]
 
 ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-            label=r'$\geq$5 Gaussians')
+            label=r'$\geq$5 Gaussians',
+            linestyle=linestyles_list[5])
 
 leg = ax.legend(loc='upper left')
 
@@ -144,13 +147,14 @@ cts, bin_edges = astro_hist(diff_bic.value[constTs_mask],
                             bins='knuth')
 bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
 
-ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All')
+ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All',
+            linewidth=2, color='k')
 
 ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
 ax.set_ylabel("Number of Spectra")
 
-ax.axvline(-10., color='k', linestyle='--')
-ax.axvline(10., color='k', linestyle='--')
+# ax.axvline(-10., color='k', linestyle='--')
+# ax.axvline(10., color='k', linestyle='--')
 
 ax.text(-80, 2e4, "Gaussian model\npreferred",
         verticalalignment='center',
@@ -162,7 +166,7 @@ ax.text(80, 2e4, "Optically-thick\nmodel preferred",
 # Now split by number of gaussians
 # Max is 8. We'll do each number up to 5, then >5
 
-for nc in range(1, 5):
+for nc, lstyle in zip(range(1, 5), linestyles_list):
 
     comp_mask = np.logical_and(constTs_mask,
                                m31_ngauss == nc)
@@ -171,7 +175,8 @@ for nc in range(1, 5):
                      bins=bin_edges)[0]
 
     ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-                label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian")
+                label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
+                linestyle=lstyle)
 
 # "the rest"
 comp_mask = np.logical_and(np.isfinite(diff_bic),
@@ -181,7 +186,8 @@ cts = astro_hist(diff_bic.value[comp_mask],
                  bins=bin_edges)[0]
 
 ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-            label=r'$\geq$5 Gaussians')
+            label=r'$\geq$5 Gaussians',
+            linestyle=linestyles_list[5])
 
 leg = ax.legend(loc='upper left')
 
@@ -205,13 +211,14 @@ cts, bin_edges = astro_hist(diff_bic.value[thick_mask],
                             bins='knuth')
 bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
 
-ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All')
+ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All',
+            linewidth=2, color='k')
 
 ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
 ax.set_ylabel("Number of Spectra")
 
-ax.axvline(-10., color='k', linestyle='--')
-ax.axvline(10., color='k', linestyle='--')
+# ax.axvline(-10., color='k', linestyle='--')
+# ax.axvline(10., color='k', linestyle='--')
 
 ax.text(-80, 2e4, "Gaussian model\npreferred",
         verticalalignment='center',
@@ -223,7 +230,7 @@ ax.text(80, 2e4, "Optically-thick\nmodel preferred",
 # Now split by number of gaussians
 # Max is 8. We'll do each number up to 5, then >5
 
-for nc in range(1, 5):
+for nc, lstyle in zip(range(1, 5), linestyles_list):
 
     comp_mask = np.logical_and(thick_mask,
                                m31_ngauss == nc)
@@ -232,7 +239,8 @@ for nc in range(1, 5):
                      bins=bin_edges)[0]
 
     ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-                label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian")
+                label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
+                linestyle=lstyle)
 
 # "the rest"
 comp_mask = np.logical_and(np.isfinite(diff_bic),
@@ -242,7 +250,8 @@ cts = astro_hist(diff_bic.value[comp_mask],
                  bins=bin_edges)[0]
 
 ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-            label=r'$\geq$5 Gaussians')
+            label=r'$\geq$5 Gaussians',
+            linestyle=linestyles_list[5])
 
 leg = ax.legend(loc='upper left')
 
@@ -267,13 +276,14 @@ cts, bin_edges = astro_hist(diff_bic.value[thick_mask],
                             bins='knuth')
 bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
 
-ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All')
+ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All',
+            linewidth=2, color='k')
 
 ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
 ax.set_ylabel("Number of Spectra")
 
-ax.axvline(-10., color='k', linestyle='--')
-ax.axvline(10., color='k', linestyle='--')
+# ax.axvline(-10., color='k', linestyle='--')
+# ax.axvline(10., color='k', linestyle='--')
 
 ax.text(-80, 2e4, "Gaussian model\npreferred",
         verticalalignment='center',
@@ -285,7 +295,8 @@ ax.text(80, 2e4, "Optically-thick\nmodel preferred",
 # Now split by number of gaussians
 # Max is 8. We'll do each number up to 5, then >5
 
-for ltau, utau in zip([0.5, 1, 2, 3, 4], [1, 2, 3, 4, 5]):
+for ltau, utau, lstyle in zip([0.5, 1, 2, 3, 4], [1, 2, 3, 4, 5],
+                              linestyles_list):
 
     tau_mask = np.logical_and(peaktau_map >= ltau,
                               peaktau_map < utau)
@@ -297,7 +308,8 @@ for ltau, utau in zip([0.5, 1, 2, 3, 4], [1, 2, 3, 4, 5]):
                      bins=bin_edges)[0]
 
     ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-                label=r'{0} $<\,\tau_0\,<$ {1}'.format(int(ltau), int(utau)))
+                label=r'{0} $<\,\tau_0\,<$ {1}'.format(int(ltau), int(utau)),
+                linestyle=lstyle)
 
 leg = ax.legend(loc='upper left')
 

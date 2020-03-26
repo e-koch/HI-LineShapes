@@ -1,5 +1,6 @@
 
 import seaborn as sb
+from collections import OrderedDict
 
 '''
 Set style for figures.
@@ -127,3 +128,23 @@ def adjust_yaxis(ax, ydif, v):
         nmaxy = maxy
         nminy = maxy * (miny + dy) / (maxy + dy)
     ax.set_ylim(nminy + v, nmaxy + v)
+
+
+linestyles = \
+    OrderedDict([('solid', (0, ())),
+                 ('dotted', (0, (2, 5))),
+                 ('dashed', (0, (5, 5))),
+                 ('dashdotted', (0, (3, 5, 1, 5))),
+                 ('dashdotdotted', (0, (3, 5, 1, 5, 1, 5))),
+
+                 ('densely dotted', (0, (1, 1))),
+                 ('densely dashed', (0, (5, 1))),
+                 ('densely dashdotted', (0, (3, 1, 1, 1))),
+                 ('densely dashdotdotted', (0, (3, 1, 1, 1, 1, 1))),
+
+                 ('loosely dotted', (0, (1, 10))),
+                 ('loosely dashed', (0, (5, 10))),
+                 ('loosely dashdotted', (0, (3, 10, 1, 10))),
+                 ('loosely dashdotdotted', (0, (3, 10, 1, 10, 1, 10)))])
+
+linestyles_list = [out[1] for out in linestyles.items()]
