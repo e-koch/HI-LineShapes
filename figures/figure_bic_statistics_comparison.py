@@ -77,246 +77,496 @@ save_figure(fig, 'm31_delta_bic_map')
 plt.close()
 
 # Show a collapsed histogram of delta BIC
+# We'll loop over three types of plots:
+# 1. Histogram
+# 2. Histogram and CDF
+# 3. 2. plus a map with contours from histogram splits
 
-fig = plt.figure()
-ax = fig.add_subplot()
+# Offset by none so I don't need an n-1 index
+file_suffixes = [None, "", "_cdf", "_cdf_map"]
 
-cts, bin_edges = astro_hist(diff_bic.value[np.isfinite(diff_bic)],
-                            bins='knuth')
-bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
+for fig_type in [1, 2, 3]:
 
-ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All',
-            linewidth=2, color='k')
+    fig = plt.figure()
+    if fig_type == 1:
+        ax = fig.add_subplot()
+    elif fig_type == 2:
+        ax = fig.add_subplot(211)
+        ax2 = fig.add_subplot(212, sharex=ax)
+    else:
+        ax = fig.add_subplot(221)
+        ax2 = fig.add_subplot(223, sharex=ax)
+        ax3 = fig.add_subplot(122, projection=diff_bic_zoom.wcs)
 
-ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
-ax.set_ylabel("Number of Spectra")
+    cts_all, bin_edges = astro_hist(diff_bic.value[np.isfinite(diff_bic)],
+                                    bins='knuth')
+    bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
 
-# ax.axvline(-10., color='k', linestyle='--')
-# ax.axvline(10., color='k', linestyle='--')
+    ax.semilogy(bin_centres, cts_all, drawstyle='steps-mid', label='All',
+                linewidth=2, color='k')
 
-ax.text(-80, 2e5, "Gaussian model\npreferred",
-        verticalalignment='center',
-        horizontalalignment='right')
-ax.text(80, 2e5, "Optically-thick model\npreferred",
-        verticalalignment='center',
-        horizontalalignment='left')
+    if fig_type == 1:
+        ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
 
-# Now split by number of gaussians
-# Max is 8. We'll do each number up to 5, then >5
+    ax.set_ylabel("Number of Spectra")
 
-for nc, lstyle in zip(range(1, 5), linestyles_list):
+    if fig_type > 1:
+        ax2.plot(bin_centres, np.cumsum(cts_all) / cts_all.sum(),
+                 drawstyle='steps-mid', label='All',
+                 linewidth=2, color='k')
+        ax2.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
+        ax2.set_ylabel("CDF")
 
+        ax2.axvline(0., color='k', linestyle='--')
+
+    ax.axvline(0., color='k', linestyle='--')
+
+    ax.text(-80, 1e5, "Gaussian model\npreferred",
+            verticalalignment='center',
+            horizontalalignment='right')
+    ax.text(80, 1e5, "Optically-thick\nmodel preferred",
+            verticalalignment='center',
+            horizontalalignment='left')
+
+    # Make delta BIC image
+    if fig_type == 3:
+        im = ax3.imshow(diff_bic_zoom.value, vmin=vmin, vmax=vmax,
+                        cmap=plt.cm.Oranges_r)
+
+        cbar = plt.colorbar(im)
+        cbar.set_label(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
+
+    # Now split by number of gaussians
+    # Max is 8. We'll do each number up to 5, then >5
+
+    for nc, lstyle in zip(range(1, 5), linestyles_list):
+
+        col = sb.color_palette()[nc - 1]
+
+        comp_mask = np.logical_and(np.isfinite(diff_bic),
+                                   m31_ngauss == nc)
+
+        cts = astro_hist(diff_bic.value[comp_mask],
+                         bins=bin_edges)[0]
+
+        ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
+                    label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
+                    linestyle=lstyle)
+
+        if fig_type > 1:
+            ax2.plot(bin_centres, np.cumsum(cts) / cts_all.sum(),
+                     drawstyle='steps-mid',
+                     label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
+                     linestyle=lstyle)
+
+        if fig_type == 3:
+            comp_mask = np.logical_and(np.isfinite(diff_bic_zoom),
+                                       m31_ngauss[spat_slice_zoom] == nc)
+
+            ax3.contour(comp_mask,
+                        linestyles=[lstyle],
+                        levels=[0.5],
+                        colors=[col])
+
+    # "the rest"
     comp_mask = np.logical_and(np.isfinite(diff_bic),
-                               m31_ngauss == nc)
+                               m31_ngauss >= 5)
 
     cts = astro_hist(diff_bic.value[comp_mask],
                      bins=bin_edges)[0]
 
     ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-                label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
-                linestyle=lstyle)
-# "the rest"
-comp_mask = np.logical_and(np.isfinite(diff_bic),
-                           m31_ngauss >= 5)
+                label=r'$\geq$5 Gaussians',
+                linestyle=linestyles_list[5])
 
-cts = astro_hist(diff_bic.value[comp_mask],
-                 bins=bin_edges)[0]
+    if fig_type > 1:
+        ax2.plot(bin_centres, np.cumsum(cts) / cts_all.sum(),
+                 label=r'$\geq$5 Gaussians',
+                 drawstyle='steps-mid',
+                 linestyle=linestyles_list[5])
 
-ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-            label=r'$\geq$5 Gaussians',
-            linestyle=linestyles_list[5])
+    if fig_type == 3:
+        comp_mask = np.logical_and(np.isfinite(diff_bic_zoom),
+                                   m31_ngauss[spat_slice_zoom] >= 5)
 
-leg = ax.legend(loc='upper left')
+        col = sb.color_palette()[4]
 
-ax.grid()
+        ax3.contour(comp_mask,
+                    linestyles=[linestyles_list[5]],
+                    levels=[0.5],
+                    colors=[col])
 
-save_figure(fig, 'm31_delta_bic_hist_all')
-plt.close()
+    if fig_type > 1:
+        leg = ax2.legend(loc='upper left')
+        ax2.grid()
+    else:
+        leg = ax.legend(loc='upper left')
 
-# Histogram but limited to where the spin temperature is constrained.
-constTs_mask = m31_thickHI_hdu[0].data[0] / m31_thickHI_hdu[1].data[0] > 1.
-constTs_mask = np.logical_and(constTs_mask,
-                              np.isfinite(m31_thickHI_hdu[1].data[0]))
-constTs_mask = np.logical_and(constTs_mask,
-                              np.isfinite(diff_bic))
+    ax.grid()
 
-fig = plt.figure()
-ax = fig.add_subplot()
+    save_figure(fig, f'm31_delta_bic_hist_all{file_suffixes[fig_type]}')
+    plt.close()
 
-cts, bin_edges = astro_hist(diff_bic.value[constTs_mask],
-                            bins='knuth')
-bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
+    # Histogram but limited to where the spin temperature is constrained.
+    constTs_mask = m31_thickHI_hdu[0].data[0] / m31_thickHI_hdu[1].data[0] > 1.
+    constTs_mask = np.logical_and(constTs_mask,
+                                  np.isfinite(m31_thickHI_hdu[1].data[0]))
+    constTs_mask = np.logical_and(constTs_mask,
+                                  np.isfinite(diff_bic))
 
-ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All',
-            linewidth=2, color='k')
+    fig = plt.figure()
+    if fig_type == 1:
+        ax = fig.add_subplot()
+    elif fig_type == 2:
+        ax = fig.add_subplot(211)
+        ax2 = fig.add_subplot(212, sharex=ax)
+    else:
+        ax = fig.add_subplot(221)
+        ax2 = fig.add_subplot(223, sharex=ax)
+        ax3 = fig.add_subplot(122, projection=diff_bic_zoom.wcs)
 
-ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
-ax.set_ylabel("Number of Spectra")
+    ax.set_ylabel("Number of Spectra")
 
-# ax.axvline(-10., color='k', linestyle='--')
-# ax.axvline(10., color='k', linestyle='--')
+    cts_all, bin_edges = astro_hist(diff_bic.value[constTs_mask],
+                                    bins='knuth')
+    bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
 
-ax.text(-80, 2e4, "Gaussian model\npreferred",
-        verticalalignment='center',
-        horizontalalignment='right')
-ax.text(80, 2e4, "Optically-thick\nmodel preferred",
-        verticalalignment='center',
-        horizontalalignment='left')
+    ax.semilogy(bin_centres, cts_all, drawstyle='steps-mid', label='All',
+                linewidth=2, color='k')
 
-# Now split by number of gaussians
-# Max is 8. We'll do each number up to 5, then >5
+    if fig_type == 1:
+        ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
 
-for nc, lstyle in zip(range(1, 5), linestyles_list):
+    ax.set_ylabel("Number of Spectra")
 
+    if fig_type > 1:
+        ax2.plot(bin_centres, np.cumsum(cts_all) / cts_all.sum(),
+                 drawstyle='steps-mid', label='All',
+                 linewidth=2, color='k')
+        ax2.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
+        ax2.set_ylabel("CDF")
+
+        ax2.axvline(0., color='k', linestyle='--')
+
+    ax.axvline(0., color='k', linestyle='--')
+
+    ax.text(-80, 2e4, "Gaussian model\npreferred",
+            verticalalignment='center',
+            horizontalalignment='right')
+    ax.text(80, 2e4, "Optically-thick\nmodel preferred",
+            verticalalignment='center',
+            horizontalalignment='left')
+
+    if fig_type == 3:
+        im = ax3.imshow(diff_bic_zoom.value, vmin=vmin, vmax=vmax,
+                        cmap=plt.cm.Oranges_r)
+
+        cbar = plt.colorbar(im)
+        cbar.set_label(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
+
+    # Now split by number of gaussians
+    # Max is 8. We'll do each number up to 5, then >5
+
+    for nc, lstyle in zip(range(1, 5), linestyles_list):
+
+        col = sb.color_palette()[nc - 1]
+
+        comp_mask = np.logical_and(constTs_mask,
+                                   m31_ngauss == nc)
+
+        cts = astro_hist(diff_bic.value[comp_mask],
+                         bins=bin_edges)[0]
+
+        ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
+                    label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
+                    linestyle=lstyle)
+
+        if fig_type > 1:
+            ax2.plot(bin_centres, np.cumsum(cts) / cts_all.sum(),
+                     drawstyle='steps-mid',
+                     label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
+                     linestyle=lstyle)
+
+        if fig_type == 3:
+            comp_mask = np.logical_and(constTs_mask[spat_slice_zoom],
+                                       m31_ngauss[spat_slice_zoom] == nc)
+
+            ax3.contour(comp_mask,
+                        linestyles=[lstyle],
+                        levels=[0.5],
+                        colors=[col])
+
+    # "the rest"
     comp_mask = np.logical_and(constTs_mask,
-                               m31_ngauss == nc)
+                               m31_ngauss >= 5)
 
     cts = astro_hist(diff_bic.value[comp_mask],
                      bins=bin_edges)[0]
 
     ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-                label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
-                linestyle=lstyle)
+                label=r'$\geq$5 Gaussians',
+                linestyle=linestyles_list[5])
 
-# "the rest"
-comp_mask = np.logical_and(np.isfinite(diff_bic),
-                           m31_ngauss >= 5)
+    if fig_type > 1:
+        ax2.plot(bin_centres, np.cumsum(cts) / cts_all.sum(),
+                 label=r'$\geq$5 Gaussians',
+                 drawstyle='steps-mid',
+                 linestyle=linestyles_list[5])
 
-cts = astro_hist(diff_bic.value[comp_mask],
-                 bins=bin_edges)[0]
+    if fig_type == 3:
+        comp_mask = np.logical_and(constTs_mask[spat_slice_zoom],
+                                   m31_ngauss[spat_slice_zoom] >= 5)
 
-ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-            label=r'$\geq$5 Gaussians',
-            linestyle=linestyles_list[5])
+        col = sb.color_palette()[4]
 
-leg = ax.legend(loc='upper left')
+        ax3.contour(comp_mask,
+                    linestyles=[linestyles_list[5]],
+                    levels=[0.5],
+                    colors=[col])
 
-ax.grid()
+    if fig_type > 1:
+        leg = ax2.legend(loc='upper left')
+        ax2.grid()
+    else:
+        leg = ax.legend(loc='upper left')
 
-save_figure(fig, 'm31_delta_bic_hist_constrained_Ts')
-plt.close()
+    ax.grid()
+
+    save_figure(fig, f'm31_delta_bic_hist_constrained_Ts{file_suffixes[fig_type]}')
+    plt.close()
 
 
-# Histogram of LOS where the thick HI peak opt. depth is >0.5
-thick_mask = m31_thickHI_hdu[0].data[2] / m31_thickHI_hdu[0].data[0] > 0.5
-thick_mask = np.logical_and(thick_mask,
-                            np.isfinite(m31_thickHI_hdu[1].data[0]))
-thick_mask = np.logical_and(thick_mask,
-                            np.isfinite(diff_bic))
+    # Histogram of LOS where the thick HI peak opt. depth is >0.5
+    thick_mask = m31_thickHI_hdu[0].data[2] / m31_thickHI_hdu[0].data[0] > 0.5
+    thick_mask = np.logical_and(thick_mask,
+                                np.isfinite(m31_thickHI_hdu[1].data[0]))
+    thick_mask = np.logical_and(thick_mask,
+                                np.isfinite(diff_bic))
 
-fig = plt.figure()
-ax = fig.add_subplot()
+    fig = plt.figure()
+    if fig_type == 1:
+        ax = fig.add_subplot()
+    elif fig_type == 2:
+        ax = fig.add_subplot(211)
+        ax2 = fig.add_subplot(212, sharex=ax)
+    else:
+        ax = fig.add_subplot(221)
+        ax2 = fig.add_subplot(223, sharex=ax)
+        ax3 = fig.add_subplot(122, projection=diff_bic_zoom.wcs)
 
-cts, bin_edges = astro_hist(diff_bic.value[thick_mask],
-                            bins='knuth')
-bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
+    cts_all, bin_edges = astro_hist(diff_bic.value[thick_mask],
+                                    bins='knuth')
+    bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
 
-ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All',
-            linewidth=2, color='k')
+    ax.semilogy(bin_centres, cts_all, drawstyle='steps-mid', label='All',
+                linewidth=2, color='k')
 
-ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
-ax.set_ylabel("Number of Spectra")
+    if fig_type == 1:
+        ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
 
-# ax.axvline(-10., color='k', linestyle='--')
-# ax.axvline(10., color='k', linestyle='--')
+    ax.set_ylabel("Number of Spectra")
 
-ax.text(-80, 2e4, "Gaussian model\npreferred",
-        verticalalignment='center',
-        horizontalalignment='right')
-ax.text(80, 2e4, "Optically-thick\nmodel preferred",
-        verticalalignment='center',
-        horizontalalignment='left')
+    if fig_type > 1:
+        ax2.plot(bin_centres, np.cumsum(cts_all) / cts_all.sum(),
+                 drawstyle='steps-mid', label='All',
+                 linewidth=2, color='k')
+        ax2.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
+        ax2.set_ylabel("CDF")
 
-# Now split by number of gaussians
-# Max is 8. We'll do each number up to 5, then >5
+        ax2.axvline(0., color='k', linestyle='--')
 
-for nc, lstyle in zip(range(1, 5), linestyles_list):
+    ax.axvline(0., color='k', linestyle='--')
 
+    ax.text(-80, 2e4, "Gaussian model\npreferred",
+            verticalalignment='center',
+            horizontalalignment='right')
+    ax.text(80, 2e4, "Optically-thick\nmodel preferred",
+            verticalalignment='center',
+            horizontalalignment='left')
+
+    if fig_type == 3:
+        im = ax3.imshow(diff_bic_zoom.value, vmin=vmin, vmax=vmax,
+                        cmap=plt.cm.Oranges_r)
+
+        cbar = plt.colorbar(im)
+        cbar.set_label(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
+
+    # Now split by number of gaussians
+    # Max is 8. We'll do each number up to 5, then >5
+
+    for nc, lstyle in zip(range(1, 5), linestyles_list):
+
+        col = sb.color_palette()[nc - 1]
+
+        comp_mask = np.logical_and(thick_mask,
+                                   m31_ngauss == nc)
+
+        cts = astro_hist(diff_bic.value[comp_mask],
+                         bins=bin_edges)[0]
+
+        ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
+                    label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
+                    linestyle=lstyle)
+
+        if fig_type > 1:
+            ax2.plot(bin_centres, np.cumsum(cts) / cts_all.sum(),
+                     drawstyle='steps-mid',
+                     label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
+                     linestyle=lstyle)
+
+        if fig_type == 3:
+            comp_mask = np.logical_and(thick_mask[spat_slice_zoom],
+                                       m31_ngauss[spat_slice_zoom] == nc)
+
+            ax3.contour(comp_mask,
+                        linestyles=[lstyle],
+                        levels=[0.5],
+                        colors=[col])
+
+    # "the rest"
     comp_mask = np.logical_and(thick_mask,
-                               m31_ngauss == nc)
+                               m31_ngauss >= 5)
 
     cts = astro_hist(diff_bic.value[comp_mask],
                      bins=bin_edges)[0]
 
     ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-                label=f'{nc} Gaussians' if nc > 1 else "1 Gaussian",
-                linestyle=lstyle)
+                label=r'$\geq$5 Gaussians',
+                linestyle=linestyles_list[5])
 
-# "the rest"
-comp_mask = np.logical_and(np.isfinite(diff_bic),
-                           m31_ngauss >= 5)
+    if fig_type > 1:
+        ax2.plot(bin_centres, np.cumsum(cts) / cts_all.sum(),
+                 label=r'$\geq$5 Gaussians',
+                 drawstyle='steps-mid',
+                 linestyle=linestyles_list[5])
 
-cts = astro_hist(diff_bic.value[comp_mask],
-                 bins=bin_edges)[0]
+    if fig_type == 3:
+        comp_mask = np.logical_and(thick_mask[spat_slice_zoom],
+                                   m31_ngauss[spat_slice_zoom] >= 5)
 
-ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-            label=r'$\geq$5 Gaussians',
-            linestyle=linestyles_list[5])
+        col = sb.color_palette()[4]
 
-leg = ax.legend(loc='upper left')
+        ax3.contour(comp_mask,
+                    linestyles=[linestyles_list[5]],
+                    levels=[0.5],
+                    colors=[col])
 
-ax.grid()
+    if fig_type > 1:
+        leg = ax2.legend(loc='upper left')
+        ax2.grid()
+    else:
+        leg = ax.legend(loc='upper left')
 
-save_figure(fig, 'm31_delta_bic_hist_tau_gt_05')
-plt.close()
+    ax.grid()
+    save_figure(fig, f'm31_delta_bic_hist_tau_gt_0p5{file_suffixes[fig_type]}')
+    plt.close()
 
 
-# Histogram binned with peak tau
-peaktau_map = m31_thickHI_hdu[0].data[2] / m31_thickHI_hdu[0].data[0]
-thick_mask = peaktau_map > 0.5
-thick_mask = np.logical_and(thick_mask,
-                            np.isfinite(m31_thickHI_hdu[1].data[0]))
-thick_mask = np.logical_and(thick_mask,
-                            np.isfinite(diff_bic))
+    # Histogram binned with peak tau
+    peaktau_map = m31_thickHI_hdu[0].data[2] / m31_thickHI_hdu[0].data[0]
+    thick_mask = peaktau_map > 0.5
+    thick_mask = np.logical_and(thick_mask,
+                                np.isfinite(m31_thickHI_hdu[1].data[0]))
+    thick_mask = np.logical_and(thick_mask,
+                                np.isfinite(diff_bic))
 
-fig = plt.figure()
-ax = fig.add_subplot()
+    fig = plt.figure()
+    if fig_type == 1:
+        ax = fig.add_subplot()
+    elif fig_type == 2:
+        ax = fig.add_subplot(211)
+        ax2 = fig.add_subplot(212, sharex=ax)
+    else:
+        ax = fig.add_subplot(221)
+        ax2 = fig.add_subplot(223, sharex=ax)
+        ax3 = fig.add_subplot(122, projection=diff_bic_zoom.wcs)
 
-cts, bin_edges = astro_hist(diff_bic.value[thick_mask],
-                            bins='knuth')
-bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
+    cts_all, bin_edges = astro_hist(diff_bic.value[thick_mask],
+                                    bins='knuth')
+    bin_centres = (bin_edges[1:] + bin_edges[:-1]) / 2.
 
-ax.semilogy(bin_centres, cts, drawstyle='steps-mid', label='All',
-            linewidth=2, color='k')
+    ax.semilogy(bin_centres, cts_all, drawstyle='steps-mid', label='All',
+                linewidth=2, color='k')
 
-ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
-ax.set_ylabel("Number of Spectra")
+    if fig_type == 1:
+        ax.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
 
-# ax.axvline(-10., color='k', linestyle='--')
-# ax.axvline(10., color='k', linestyle='--')
+    ax.set_ylabel("Number of Spectra")
 
-ax.text(-80, 2e4, "Gaussian model\npreferred",
-        verticalalignment='center',
-        horizontalalignment='right')
-ax.text(80, 2e4, "Optically-thick\nmodel preferred",
-        verticalalignment='center',
-        horizontalalignment='left')
+    if fig_type > 1:
+        ax2.plot(bin_centres, np.cumsum(cts_all) / cts_all.sum(),
+                 drawstyle='steps-mid', label='All',
+                 linewidth=2, color='k')
+        ax2.set_xlabel(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
+        ax2.set_ylabel("CDF")
 
-# Now split by number of gaussians
-# Max is 8. We'll do each number up to 5, then >5
+        ax2.axvline(0., color='k', linestyle='--')
 
-for ltau, utau, lstyle in zip([0.5, 1, 2, 3, 4], [1, 2, 3, 4, 5],
-                              linestyles_list):
+    ax.axvline(0., color='k', linestyle='--')
 
-    tau_mask = np.logical_and(peaktau_map >= ltau,
-                              peaktau_map < utau)
+    # ax.axvline(-10., color='k', linestyle='--')
+    # ax.axvline(10., color='k', linestyle='--')
 
-    comp_mask = np.logical_and(thick_mask,
-                               tau_mask)
+    ax.text(-80, 2e4, "Gaussian model\npreferred",
+            verticalalignment='center',
+            horizontalalignment='right')
+    ax.text(80, 2e4, "Optically-thick\nmodel preferred",
+            verticalalignment='center',
+            horizontalalignment='left')
 
-    cts = astro_hist(diff_bic.value[comp_mask],
-                     bins=bin_edges)[0]
+    if fig_type == 3:
+        im = ax3.imshow(diff_bic_zoom.value, vmin=vmin, vmax=vmax,
+                        cmap=plt.cm.Oranges_r)
 
-    ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
-                label=r'{0} $<\,\tau_0\,<$ {1}'.format(int(ltau), int(utau)),
-                linestyle=lstyle)
+        cbar = plt.colorbar(im)
+        cbar.set_label(r"BIC$_{\rm Gauss}$ - BIC$_{\rm Thick}$")
 
-leg = ax.legend(loc='upper left')
+    # Now split by number of gaussians
+    # Max is 8. We'll do each number up to 5, then >5
 
-ax.grid()
+    for ltau, utau, lstyle in zip([0.5, 1, 2, 3, 4], [1, 2, 3, 4, 5],
+                                  linestyles_list):
 
-save_figure(fig, 'm31_delta_bic_hist_tau_steps')
-plt.close()
+        col = sb.color_palette()[utau - 1]
+
+        tau_mask = np.logical_and(peaktau_map >= ltau,
+                                  peaktau_map < utau)
+
+        comp_mask = np.logical_and(thick_mask,
+                                   tau_mask)
+
+        cts = astro_hist(diff_bic.value[comp_mask],
+                         bins=bin_edges)[0]
+
+        ax.semilogy(bin_centres, cts, drawstyle='steps-mid',
+                    label=r'{0} $<\,\tau_0\,<$ {1}'.format(int(ltau), int(utau)),
+                    linestyle=lstyle)
+
+        if fig_type > 1:
+            ax2.plot(bin_centres, np.cumsum(cts) / cts_all.sum(),
+                     drawstyle='steps-mid',
+                     label=r'{0} $<\,\tau_0\,<$ {1}'.format(int(ltau), int(utau)),
+                     linestyle=lstyle)
+
+        if fig_type == 3:
+            comp_mask = np.logical_and(thick_mask[spat_slice_zoom],
+                                       tau_mask[spat_slice_zoom])
+
+            ax3.contour(comp_mask,
+                        linestyles=[lstyle],
+                        levels=[0.5],
+                        colors=[col])
+
+    if fig_type > 1:
+        leg = ax2.legend(loc='upper left')
+        ax2.grid()
+    else:
+        leg = ax.legend(loc='upper left')
+
+    ax.grid()
+
+    save_figure(fig, f'm31_delta_bic_hist_tau_steps{file_suffixes[fig_type]}')
+    plt.close()
 
 
 # Make a box plot of the peak tau vs. number of Gaussians
