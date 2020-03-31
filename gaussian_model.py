@@ -14,9 +14,13 @@ spectra.
 However, it likely overfits in some cases.
 '''
 
+import os
+from tqdm import tqdm
 import numpy as np
-from lmfit import Model, Parameters, Minimizer, report_fit
+from lmfit import Parameters, Minimizer, report_fit
 # from lmfit.models import gaussian
+from astropy.io import fits
+from spectral_cube import SpectralCube
 import astropy.units as u
 import matplotlib.pyplot as plt
 from astropy.convolution import convolve_fft, Gaussian1DKernel
@@ -569,3 +573,328 @@ def fit_func_gausspy(spec, noise_val,
     # print(f"In the output array: {params_array}")
 
     return params_array, uncerts_array, multigauss_fit.bic
+
+
+def refit_multigaussian(spec, init_params,
+                        vels=None,
+                        vcent=None,
+                        err=None,
+                        amp_const=None,
+                        cent_const=None,
+                        sigma_const=None,
+                        discrete_fitter=False):
+    '''
+    Given full set of initial parameters, refit the spectrum.
+    '''
+
+    if len(init_params) < 3:
+        raise ValueError("Less than 3 initial parameters given.")
+
+    if vels is None:
+        spec = spec.with_spectral_unit(u.m / u.s)
+        vels = spec.spectral_axis
+
+    # Set parameter limits:
+    if amp_const is None:
+        amp_min = 0.
+        amp_max = 1.1 * np.nanmax(spec.value)
+    else:
+        amp_min = amp_const[0]
+        amp_max = amp_const[1]
+
+    if cent_const is None:
+        cent_min = vels.value.min() - 0.1 * np.ptp(vels.value)
+        cent_max = vels.value.max() + 0.1 * np.ptp(vels.value)
+    else:
+        cent_min = cent_const[0]
+        cent_max = cent_const[1]
+
+    if sigma_const is None:
+        sig_min = np.abs(np.diff(vels.value)[0])
+        sig_max = 0.5 * np.ptp(vels.value) / 2.35
+    else:
+        sig_min = sigma_const[0]
+        sig_max = sigma_const[1]
+
+    # Create the fit parameter
+    pars = Parameters()
+
+    for i in range(len(init_params) // 3):
+        pars.add(name=f'amp{i + 1}', value=init_params[3 * i],
+                 min=amp_min, max=amp_max)
+        pars.add(name=f'cent{i + 1}', value=init_params[3 * i + 1],
+                 min=cent_min, max=cent_max)
+        pars.add(name=f'sigma{i + 1}', value=init_params[3 * i + 2],
+                 min=sig_min, max=sig_max)
+
+    valid_data = np.isfinite(spec.filled_data[:])
+    yfit = spec.filled_data[:].value[valid_data]
+    xfit = vels.value[valid_data]
+
+    if discrete_fitter:
+        vels = xfit.copy()
+
+        # Upsample for computing over discrete bins
+        chan_width = np.abs(np.diff(vels.value)[0])
+
+        order_sign = 1. if vels[-1] > vels[0] else -1.
+
+        # You really need to rewrite this to be faster.
+        discrete_oversamp = 4
+        assert discrete_oversamp > 1.
+        xfit_upsamp = np.linspace(vels.value[0] - order_sign * 0.5 * chan_width,
+                                  vels.value[-1] + order_sign * 0.5 * chan_width,
+                                  vels.size * discrete_oversamp)
+    else:
+        xfit_upsamp = None
+
+    mini = Minimizer(residual_multigauss, pars,
+                     fcn_args=(xfit, xfit_upsamp, yfit,
+                               err if err is not None else 1.,
+                               discrete_fitter),
+                     maxfev=vels.size * 1000)
+
+    out = mini.leastsq()
+
+    return out
+
+
+def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
+                                 diff_bic=10, err_map=None):
+    '''
+    Lazily account for spatial continuity by checking the fit
+    of each pixel relative to its neighbours.
+    If delta BIC < -10, will attempt to refit the pixel with that
+    neighbour's model.
+    If there is a difference in the number of components, will also
+    attempt to refit with a different number of components initialized
+    to the neighbour's fit.
+
+    This is done in serial. Which isn't ideal but accounts for other pixels
+    first being updated.
+    '''
+
+    params_hdu = fits.open(params_name)
+
+    params_array = params_hdu[0].data
+    uncerts_array = params_hdu[1].data
+    bic_array = params_hdu[2].data
+
+    ncomp_array = np.isfinite(params_array).sum(0) // 3
+
+    cube = SpectralCube.read(cube_name)
+    assert cube.shape[1:] == bic_array.shape
+
+    if err_map is not None:
+
+        if hasattr(err_map, 'value'):
+            err_map = err_map.value.copy()
+
+        assert err_map.shape == bic_array.shape
+
+    # Number of pixels with valid fits.
+    yposn, xposn = np.where(np.isfinite(bic_array))
+
+    yshape, xshape = bic_array.shape
+
+    basename = os.path.basename(cube_name)
+
+    for i, (y, x) in tqdm(enumerate(zip(yposn, xposn)),
+                          ascii=True,
+                          desc=f"Rev. fit for: {basename[:15]}",
+                          total=yposn.size):
+
+        err = None if err_map is None else err_map[y, x]
+
+        # Reload cube to release memory
+        if i % chunk_size == 0:
+            del cube
+            cube = SpectralCube.read(cube_name)
+
+        # Slice out 3x3 neighbourhood of y, x
+        ymin = max(0, y - 1)
+        ymax = min(yshape, y + 2)
+        xmin = max(0, x - 1)
+        xmax = min(xshape, x + 2)
+
+        bic_neighb = bic_array[ymin:ymax, xmin:xmax]
+        ncomp_neighb = ncomp_array[ymin:ymax, xmin:xmax].copy()
+
+        orig_posn = np.where(bic_neighb == bic_array[y, x])
+        orig_index = (orig_posn[0][0], orig_posn[1][0])
+
+        # If no valid neighbours, skip:
+        if np.isfinite(bic_neighb).sum() == 1:
+            continue
+
+        # Condition 1: delta BIC
+        if np.nanmax(bic_array[y, x] - bic_neighb) >= diff_bic:
+            argmin = np.unravel_index(np.nanargmin(bic_neighb), (3, 3))
+
+            yneighb = y + (argmin[0] - 1)
+            xneighb = x + (argmin[1] - 1)
+
+            # Refit
+            spec = cube[:, y, x]
+
+            init_params = params_array[:, yneighb, xneighb]
+            init_params = init_params[np.isfinite(init_params)]
+
+            assert init_params.size > 0
+
+            out_new = \
+                refit_multigaussian(spec, init_params,
+                                    vels=None,
+                                    vcent=None,
+                                    err=err,
+                                    amp_const=None,
+                                    cent_const=None,
+                                    sigma_const=None,
+                                    discrete_fitter=False)
+
+            if bic_array[y, x] - out_new.bic >= diff_bic:
+                # Update the parameter array
+                params_array[:, y, x] = np.NaN
+                params_array[:len(init_params), y, x] = \
+                    [val.value for val in out_new.params.values()]
+
+                uncerts_array[:, y, x] = np.NaN
+                uncerts_array[:len(init_params), y, x] = \
+                    [val.stderr if val.stderr is not None else np.NaN
+                     for val in out_new.params.values()]
+
+                bic_array[y, x] = out_new.bic
+
+            continue
+
+        # Condition 2: Change in # of components
+        elif ((ncomp_array[y, x] - ncomp_neighb) != 0).any():
+
+            # We'll do this twice with the largest and smallest number of
+            # components.
+            # The lowest BIC fit will be kept.
+
+            spec = cube[:, y, x]
+
+            max_comp = ncomp_neighb.max()
+            min_bic = bic_neighb[ncomp_neighb == max_comp].min()
+
+            posn = np.where(bic_neighb == min_bic)
+            argmax = (posn[0][0], posn[1][0])
+
+            # Skip max if this is the original spectrum
+            if argmax == orig_index:
+                maxcomp_bic = bic_array[y, x]
+            else:
+
+                yneighb = y + (argmax[0] - 1)
+                xneighb = x + (argmax[1] - 1)
+
+                # Refit
+
+                init_params_max = params_array[:, yneighb, xneighb]
+                init_params_max = init_params_max[np.isfinite(init_params_max)]
+
+                assert init_params_max.size > 0
+
+                out_new_max = \
+                    refit_multigaussian(spec, init_params_max,
+                                        vels=None,
+                                        vcent=None,
+                                        err=err,
+                                        amp_const=None,
+                                        cent_const=None,
+                                        sigma_const=None,
+                                        discrete_fitter=False)
+
+                maxcomp_bic = out_new_max.bic
+
+            min_comp = ncomp_neighb[ncomp_neighb > 0].min()
+            min_bic = bic_neighb[ncomp_neighb == min_comp].min()
+
+            posn = np.where(bic_neighb == min_bic)
+            argmin = (posn[0][0], posn[1][0])
+
+            # Skip max if this is the original spectrum
+            if argmin == orig_index:
+                mincomp_bic = bic_array[y, x]
+            else:
+
+                yneighb = y + (argmin[0] - 1)
+                xneighb = x + (argmin[1] - 1)
+
+                # Refit
+
+                init_params_min = params_array[:, yneighb, xneighb]
+                init_params_min = init_params_min[np.isfinite(init_params_min)]
+
+                assert init_params_min.size > 0
+
+                out_new_min = \
+                    refit_multigaussian(spec, init_params_min,
+                                        vels=None,
+                                        vcent=None,
+                                        err=err,
+                                        amp_const=None,
+                                        cent_const=None,
+                                        sigma_const=None,
+                                        discrete_fitter=False)
+
+                mincomp_bic = out_new_min.bic
+
+            diff_maxcomp = (bic_array[y, x] - maxcomp_bic) >= diff_bic
+            diff_mincomp = (bic_array[y, x] - mincomp_bic) >= diff_bic
+
+            # Original fit is good.
+            if not diff_mincomp and not diff_maxcomp:
+                continue
+            # Both are better than original. Take best.
+            elif diff_mincomp and diff_maxcomp:
+                if maxcomp_bic < mincomp_bic:
+                    out_new = out_new_max
+                else:
+                    out_new = out_new_min
+            # Update to max component fit.
+            elif diff_maxcomp:
+                out_new = out_new_max
+            # Update to min component fit.
+            else:
+                out_new = out_new_min
+
+            # Update the parameter array
+            params_array[:, y, x] = np.NaN
+            params_array[:len(out_new.params), y, x] = \
+                [val.value for val in out_new.params.values()]
+
+            uncerts_array[:, y, x] = np.NaN
+            uncerts_array[:len(out_new.params), y, x] = \
+                [val.stderr if val.stderr is not None else np.NaN
+                 for val in out_new.params.values()]
+
+            bic_array[y, x] = out_new.bic
+
+        # Otherwise no refit is needed.
+        else:
+            continue
+
+    del cube
+
+    cube = SpectralCube.read(cube_name)
+
+    # Grab the celestial header
+    spat_header = cube[0].header
+    del cube
+
+    # Return a combined HDU that can be written out.
+    params_hdu = fits.PrimaryHDU(params_array, spat_header.copy())
+    params_hdu.header['BUNIT'] = ("", "Gaussian fit parameters")
+
+    uncerts_hdu = fits.ImageHDU(uncerts_array, spat_header.copy())
+    uncerts_hdu.header['BUNIT'] = ("", "Gaussian fit uncertainty")
+
+    bics_hdu = fits.ImageHDU(bic_array, spat_header.copy())
+    bics_hdu.header['BUNIT'] = ("", "Gaussian fit BIC")
+
+    hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
+
+    return hdu_all
