@@ -125,8 +125,23 @@ if run_C:
 
     hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
 
-    hdu_all.writeto(fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits.fits", no_check=True),
-                    overwrite=True)
+    params_name = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits.fits", no_check=True)
+
+    hdu_all.writeto(params_name, overwrite=True)
+
+    # Stage 2: Do a neighbourhood check to ensure smoother fit solutions.
+    # Now we'll loop through the fits to check against the 3x3 neighbourhood.
+    # This should even out nearby spectral fits and the number of components.
+    hdu_all_revised = neighbourhood_fit_comparison(cube_name,
+                                                   params_name,
+                                                   chunk_size=80000,
+                                                   diff_bic=10,
+                                                   err_map=err_map)
+
+    params_name_rev = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck.fits", no_check=True)
+
+    hdu_all_revised.writeto(params_name_rev, overwrite=True)
+
 
 if run_BC:
     pass
