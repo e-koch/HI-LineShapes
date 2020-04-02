@@ -693,7 +693,7 @@ def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
         assert err_map.shape == bic_array.shape
 
     # Number of pixels with valid fits.
-    yposn, xposn = np.where(np.isfinite(bic_array))
+    yposn, xposn = np.where(np.isfinite(bic_array) & (ncomp_array > 0))
 
     yshape, xshape = bic_array.shape
 
@@ -717,8 +717,9 @@ def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
         xmin = max(0, x - 1)
         xmax = min(xshape, x + 2)
 
-        bic_neighb = bic_array[ymin:ymax, xmin:xmax]
-        ncomp_neighb = ncomp_array[ymin:ymax, xmin:xmax].copy()
+        bic_neighb = bic_array[ymin:ymax, xmin:xmax].copy()
+        ncomp_neighb = ncomp_array[ymin:ymax, xmin:xmax]
+        bic_neighb[ncomp_neighb == 0] = np.NaN
 
         orig_posn = np.where(bic_neighb == bic_array[y, x])
         orig_index = (orig_posn[0][0], orig_posn[1][0])
