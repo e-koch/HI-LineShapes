@@ -51,6 +51,23 @@ def multigaussian(x, pars):
     return model
 
 
+def multigaussian_nolmfit(x, pars):
+
+    ncomp = pars.size // 3
+
+    model = gaussian(x, pars[0], pars[1], pars[2])
+
+    if ncomp == 1:
+        return model
+
+    for nc in range(1, ncomp):
+        model += gaussian(x, pars[3 * nc],
+                          pars[3 * nc + 1],
+                          pars[3 * nc + 2])
+
+    return model
+
+
 def residual_single(pars, x, data, err):
     model = gaussian(x, pars['amp'], pars['cent'], pars['sigma'])
     return (model - data) / err
@@ -903,3 +920,57 @@ def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
     hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
 
     return hdu_all
+
+
+def save_fitmodel(cube_name, params_name,
+                  output_name,
+                  chunk_size=80000,
+                  save_sep_components=False):
+    '''
+    Output the fit model as a FITS cube. Optionally with
+    extensions for every component.
+    '''
+
+    params_hdu = fits.open(params_name)
+
+    params_array = params_hdu[0].data
+    bic_array = params_hdu[2].data
+
+    ncomp_array = np.isfinite(params_array).sum(0) // 3
+
+    cube = SpectralCube.read(cube_name)
+    assert cube.shape[1:] == bic_array.shape
+
+    vels = cube.spectral_axis.to(u.m / u.s)
+    vels_val = vels.value
+
+    # Number of pixels with valid fits.
+    yposn, xposn = np.where(np.isfinite(bic_array) & (ncomp_array > 0))
+
+    yshape, xshape = bic_array.shape
+
+    basename = os.path.basename(cube_name)
+
+    # Create the output cube.
+    from cube_analysis.io_utils import create_huge_fits
+    create_huge_fits(output_name, cube.header, fill_nan=True)
+
+    hdu = fits.open(output_name, mode='update')
+
+    for i, (y, x) in tqdm(enumerate(zip(yposn, xposn)),
+                          ascii=True,
+                          desc=f"Model eval. for: {basename[:15]}",
+                          total=yposn.size):
+
+        # Reload cube to release memory
+        if i % chunk_size == 0:
+            hdu.flush()
+            hdu.close()
+            del hdu
+            hdu = fits.open(output_name, mode='update')
+
+        pars = params_array[:, y, x][np.isfinite(params_array[:, y, x])]
+        hdu[0].data[:, y, x] = multigaussian_nolmfit(vels_val, pars)
+
+    hdu.flush()
+    hdu.close()
