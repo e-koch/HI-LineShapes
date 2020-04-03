@@ -660,7 +660,8 @@ def refit_multigaussian(spec, init_params,
 
 
 def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
-                                 diff_bic=10, err_map=None):
+                                 diff_bic=10, err_map=None,
+                                 use_ncomp_check=True):
     '''
     Lazily account for spatial continuity by checking the fit
     of each pixel relative to its neighbours.
@@ -770,6 +771,9 @@ def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
 
         # Condition 2: Change in # of components
         elif ((ncomp_array[y, x] - ncomp_neighb) != 0).any():
+
+            if not use_ncomp_check:
+                continue
 
             # We'll do this twice with the largest and smallest number of
             # components.
