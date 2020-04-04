@@ -20,7 +20,7 @@ import numpy as np
 from lmfit import Parameters, Minimizer, report_fit
 # from lmfit.models import gaussian
 from astropy.io import fits
-from spectral_cube import SpectralCube
+from spectral_cube import SpectralCube, Projection
 import astropy.units as u
 import matplotlib.pyplot as plt
 from astropy.convolution import convolve_fft, Gaussian1DKernel
@@ -974,3 +974,74 @@ def save_fitmodel(cube_name, params_name,
 
     hdu.flush()
     hdu.close()
+
+
+def remove_mw_components(params_name, vcent_name,
+                         delta_v=80 * u.km / u.s):
+    '''
+    All components get fit, including MW contamination.
+    This is mostly an issue for M31 in C and D configs.
+    This function only keeps components that are likely
+    to be part of the galaxy.
+    '''
+
+    delta_v = delta_v.to(u.m / u.s)
+
+    params_hdu = fits.open(params_name)
+
+    params_array = params_hdu[0].data
+    uncert_array = params_hdu[1].data
+    bic_array = params_hdu[2].data
+
+    ncomp_array = np.isfinite(params_array).sum(0) // 3
+
+    vcent = Projection.from_hdu(fits.open(vcent_name))
+    assert vcent.shape == bic_array.shape
+
+    vcent = vcent.to(u.m / u.s)
+
+    new_params_array = np.zeros_like(params_array) * np.NaN
+    new_uncert_array = np.zeros_like(params_array) * np.NaN
+
+    yposn, xposn = np.where(np.isfinite(bic_array) & (ncomp_array > 0))
+
+    for i, (y, x) in enumerate(zip(yposn, xposn)):
+
+        vcent_val = vcent.value[y, x]
+        vmin = vcent_val - delta_v.value
+        vmax = vcent_val + delta_v.value
+
+        vfits = params_array[1::3, y, x][:ncomp_array[y, x]]
+
+        valids = np.where(np.logical_and(vfits >= vmin, vfits <= vmax))[0]
+
+        for j, comp in enumerate(valids):
+            new_params_array[3 * j, y, x] = params_array[3 * comp, y, x]
+            new_params_array[3 * j + 1, y, x] = params_array[3 * comp + 1, y, x]
+            new_params_array[3 * j + 2, y, x] = params_array[3 * comp + 2, y, x]
+
+            new_uncert_array[3 * j, y, x] = uncert_array[3 * comp, y, x]
+            new_uncert_array[3 * j + 1, y, x] = uncert_array[3 * comp + 1, y, x]
+            new_uncert_array[3 * j + 2, y, x] = uncert_array[3 * comp + 2, y, x]
+
+    # Return a combined HDU that can be written out.
+    params_hdu = fits.PrimaryHDU(new_params_array, vcent.header.copy())
+    params_hdu.header['BUNIT'] = ("", "Gaussian fit parameters")
+
+    uncerts_hdu = fits.ImageHDU(new_uncert_array, vcent.header.copy())
+    uncerts_hdu.header['BUNIT'] = ("", "Gaussian fit uncertainty")
+
+    # Will need to update the BIC eventually...
+    bics_hdu = fits.ImageHDU(bic_array, vcent.header.copy())
+    bics_hdu.header['BUNIT'] = ("", "Gaussian fit BIC")
+
+    hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
+
+    return hdu_all
+
+
+def calculate_bic_noMW():
+    '''
+    Add a function to recompute the BIC after masking all MW emission.
+    '''
+    pass
