@@ -42,6 +42,9 @@ def multigaussian(x, pars):
 
     ncomp = len([par for par in pars if 'amp' in par])
 
+    if ncomp == 0:
+        return np.zeros_like(x)
+
     model = gaussian(x, pars["amp1"], pars['cent1'], pars['sigma1'])
 
     for nc in range(2, ncomp + 1):
@@ -606,14 +609,14 @@ def refit_multigaussian(spec, init_params,
     Given full set of initial parameters, refit the spectrum.
     '''
 
-    if len(init_params) < 3:
-        raise ValueError("Less than 3 initial parameters given.")
+    # if len(init_params) < 3:
+    #     raise ValueError("Less than 3 initial parameters given.")
 
     if vels is None:
         spec = spec.with_spectral_unit(u.m / u.s)
         vels = spec.spectral_axis
 
-    chan_width = np.abs(np.diff(vels)[:1])
+    chan_width = np.abs(np.diff(vels)[:1]).value
 
     if err is None:
         # Can't remove components if we don't know what the error is
@@ -690,7 +693,12 @@ def refit_multigaussian(spec, init_params,
 
         out = mini.leastsq()
 
-        params_fit = out.params
+        # Testing null model. Nothing to check
+        if len(pars) == 0:
+            break
+
+        params_fit = [value.value for value in out.params.values()]
+        params_fit = np.array(params_fit)
 
         # Make sure all components are significant
         component_signif = comp_sig(params_fit[::3],
@@ -701,10 +709,17 @@ def refit_multigaussian(spec, init_params,
 
         comp_del = np.argmin(component_signif)
 
-        for comp in np.where(comp_del)[0]:
-            pars.pop(f"amp{comp + 1}")
-            pars.pop(f"cent{comp + 1}")
-            pars.pop(f"sigma{comp + 1}")
+        pars = Parameters()
+
+        remain_comps = np.delete(np.arange(len(params_fit) // 3), comp_del)
+        for i, comp in enumerate(remain_comps):
+
+            pars.add(name=f'amp{i + 1}', value=init_params[3 * i],
+                     min=amp_min, max=amp_max)
+            pars.add(name=f'cent{i + 1}', value=init_params[3 * i + 1],
+                     min=cent_min, max=cent_max)
+            pars.add(name=f'sigma{i + 1}', value=init_params[3 * i + 2],
+                     min=sig_min, max=sig_max)
 
     return out
 
@@ -797,7 +812,7 @@ def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
             init_params = params_array[:, yneighb, xneighb]
             init_params = init_params[np.isfinite(init_params)]
 
-            assert init_params.size > 0
+            # assert init_params.size > 0
 
             out_new = \
                 refit_multigaussian(spec, init_params,
@@ -812,11 +827,11 @@ def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
             if bic_array[y, x] - out_new.bic >= diff_bic:
                 # Update the parameter array
                 params_array[:, y, x] = np.NaN
-                params_array[:len(init_params), y, x] = \
+                params_array[:len(out_new.params), y, x] = \
                     [val.value for val in out_new.params.values()]
 
                 uncerts_array[:, y, x] = np.NaN
-                uncerts_array[:len(init_params), y, x] = \
+                uncerts_array[:len(out_new.params), y, x] = \
                     [val.stderr if val.stderr is not None else np.NaN
                      for val in out_new.params.values()]
 
