@@ -599,6 +599,8 @@ def refit_multigaussian(spec, init_params,
                         amp_const=None,
                         cent_const=None,
                         sigma_const=None,
+                        component_sigma=5.,
+                        nchan_component_sigma=3.,
                         discrete_fitter=False):
     '''
     Given full set of initial parameters, refit the spectrum.
@@ -610,6 +612,19 @@ def refit_multigaussian(spec, init_params,
     if vels is None:
         spec = spec.with_spectral_unit(u.m / u.s)
         vels = spec.spectral_axis
+
+    chan_width = np.abs(np.diff(vels)[:1])
+
+    if err is None:
+        # Can't remove components if we don't know what the error is
+        def comp_sig(amp, sigma):
+            return True
+
+    else:
+
+        def comp_sig(amp, sigma):
+            return (amp * sigma) / \
+                (err * chan_width * nchan_component_sigma)
 
     # Set parameter limits:
     if amp_const is None:
@@ -665,20 +680,39 @@ def refit_multigaussian(spec, init_params,
     else:
         xfit_upsamp = None
 
-    mini = Minimizer(residual_multigauss, pars,
-                     fcn_args=(xfit, xfit_upsamp, yfit,
-                               err if err is not None else 1.,
-                               discrete_fitter),
-                     maxfev=vels.size * 1000)
+    while True:
 
-    out = mini.leastsq()
+        mini = Minimizer(residual_multigauss, pars,
+                         fcn_args=(xfit, xfit_upsamp, yfit,
+                                   err if err is not None else 1.,
+                                   discrete_fitter),
+                         maxfev=vels.size * 1000)
+
+        out = mini.leastsq()
+
+        params_fit = out.params
+
+        # Make sure all components are significant
+        component_signif = comp_sig(params_fit[::3],
+                                    params_fit[2::3])
+
+        if np.all(component_signif >= component_sigma):
+            break
+
+        comp_del = np.argmin(component_signif)
+
+        for comp in np.where(comp_del)[0]:
+            pars.pop(f"amp{comp + 1}")
+            pars.pop(f"cent{comp + 1}")
+            pars.pop(f"sigma{comp + 1}")
 
     return out
 
 
 def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
                                  diff_bic=10, err_map=None,
-                                 use_ncomp_check=True):
+                                 use_ncomp_check=True,
+                                 reverse_direction=False):
     '''
     Lazily account for spatial continuity by checking the fit
     of each pixel relative to its neighbours.
@@ -712,6 +746,10 @@ def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
 
     # Number of pixels with valid fits.
     yposn, xposn = np.where(np.isfinite(bic_array) & (ncomp_array > 0))
+
+    if reverse_direction:
+        yposn = yposn[::-1]
+        xposn = xposn[::-1]
 
     yshape, xshape = bic_array.shape
 
