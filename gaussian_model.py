@@ -683,6 +683,8 @@ def refit_multigaussian(spec, init_params,
     else:
         xfit_upsamp = None
 
+    comp_deletes = []
+
     while True:
 
         mini = Minimizer(residual_multigauss, pars,
@@ -708,10 +710,14 @@ def refit_multigaussian(spec, init_params,
             break
 
         comp_del = np.argmin(component_signif)
+        comp_deletes.append(comp_del)
+
+        remain_comps = np.arange(len(params_fit) // 3)
+        for dcomp in comp_deletes:
+            remain_comps = np.delete(remain_comps, dcomp)
 
         pars = Parameters()
 
-        remain_comps = np.delete(np.arange(len(params_fit) // 3), comp_del)
         for i, comp in enumerate(remain_comps):
 
             pars.add(name=f'amp{i + 1}', value=init_params[3 * i],
