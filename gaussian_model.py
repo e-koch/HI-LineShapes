@@ -784,7 +784,7 @@ def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
         err = None if err_map is None else err_map[y, x]
 
         # Reload cube to release memory
-        if i % chunk_size == 0:
+        if i % chunk_size == 0 and i != 0:
             del cube
             cube = SpectralCube.read(cube_name)
 

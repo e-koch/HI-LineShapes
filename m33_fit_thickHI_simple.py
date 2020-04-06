@@ -29,7 +29,7 @@ run_BC = False
 
 # Enable to limit the thick HI vel. centroid to \pm 5 km/s
 # of the centroid velocity.
-with_vcent_constraint = False
+with_vcent_constraint = True
 
 if with_vcent_constraint:
     delta_vcent = 5 * u.km / u.s

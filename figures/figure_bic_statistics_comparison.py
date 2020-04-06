@@ -33,19 +33,23 @@ plotstyle_script = os.path.join(repo_path, "plotting_styles.py")
 exec(compile(open(plotstyle_script, "rb").read(), plotstyle_script, 'exec'))
 
 run_m31 = True
-run_m33 = True
+run_m33 = False
 
 # M31
 
 if run_m31:
 
-    m31_multigauss_name = fifteenA_HI_BCtaper_04kms_data_wEBHIS_path("individ_multigaussian_gausspy_fits.fits")
+    # m31_multigauss_name = fifteenA_HI_BCtaper_04kms_data_wEBHIS_path("individ_multigaussian_gausspy_fits.fits")
+    m31_multigauss_name = fifteenA_HI_BCtaper_04kms_data_wEBHIS_path("individ_multigaussian_gausspy_fits_neighbcheck.fits")
     m31_multigauss_hdu = fits.open(m31_multigauss_name)
 
     m31_ngauss = np.isfinite(m31_multigauss_hdu[0].data).sum(0) // 3
 
     m31_thickHI_name = fifteenA_HI_BCtaper_04kms_data_wEBHIS_path("individ_simplethick_HI_fits_5kms_centlimit.fits")
     m31_thickHI_hdu = fits.open(m31_thickHI_name)
+
+    # Keep only where the fit parameters are valid
+    m31_multigauss_hdu[2].data[m31_ngauss == 0] = np.NaN
 
     m31_multigauss_bic_proj = Projection.from_hdu(m31_multigauss_hdu[2])
     m31_thickHI_bic_proj = Projection.from_hdu(m31_thickHI_hdu[2])
@@ -597,13 +601,16 @@ if run_m31:
 # M33
 if run_m33:
 
-    m33_multigauss_name = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits.fits")
+    m33_multigauss_name = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck.fits")
     m33_multigauss_hdu = fits.open(m33_multigauss_name)
 
     m33_ngauss = np.isfinite(m33_multigauss_hdu[0].data).sum(0) // 3
 
     m33_thickHI_name = fourteenB_HI_data_wGBT_path("individ_simplethick_HI_fits_5kms_centlimit.fits")
     m33_thickHI_hdu = fits.open(m33_thickHI_name)
+
+    # Keep only where the fit parameters are valid
+    m33_multigauss_hdu[2].data[m33_ngauss == 0] = np.NaN
 
     m33_multigauss_bic_proj = Projection.from_hdu(m33_multigauss_hdu[2])
     m33_thickHI_bic_proj = Projection.from_hdu(m33_thickHI_hdu[2])
