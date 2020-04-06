@@ -848,6 +848,8 @@ def AGD_loop(spec, errors,
             continue
 
         # Search for phase-two guesses
+        say(f"Stage 2 with S/N thresholds {SNR_thresh2} and {SNR2_thresh2}.")
+
         agd2 = initialGuess(vel, residuals,
                             # Adjust error after median window average.
                             errors=errors[0] / np.sqrt(alpha / 4.),
@@ -1023,6 +1025,8 @@ def AGD_loop(spec, errors,
             ax1.axhline(color='black', linewidth=0.5)
             ax1.plot(vel, data, '-k')
             ax1.plot(vel, u2 * u2_scale, '-r')
+            say(f"S/N threshold is: {agd1['thresh']}", verbose)
+            say(f"S/N threshold2 is: {agd1['thresh2']}", verbose)
             ax1.plot(vel, np.ones(len(vel)) * agd1['thresh'], '--k')
             ax1.plot(vel, np.ones(len(vel)) * agd1['thresh2'] * u2_scale, '--r')
 
@@ -1047,6 +1051,9 @@ def AGD_loop(spec, errors,
             u22_scale = 1. / np.abs(u22).max() * np.max(residuals) * 0.5
             ax3.axhline(color='black', linewidth=0.5)
             ax3.plot(vel, residuals, '-k')
+            say(f"S/N threshold is: {agd2['thresh']}", verbose)
+            say(f"S/N threshold2 is: {agd2['thresh2']}", verbose)
+
             ax3.plot(vel, np.ones(len(vel)) * agd2['thresh'], '--k')
             ax3.plot(vel, np.ones(len(vel)) * agd2['thresh2'] * u22_scale,
                      '--r')
