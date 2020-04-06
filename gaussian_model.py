@@ -712,7 +712,8 @@ def refit_multigaussian(spec, init_params,
         comp_del = np.argmin(component_signif)
         comp_deletes.append(comp_del)
 
-        remain_comps = np.arange(len(params_fit) // 3)
+        remain_comps = np.arange(len(init_params) // 3)
+
         for dcomp in comp_deletes:
             remain_comps = np.delete(remain_comps, dcomp)
 
