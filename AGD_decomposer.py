@@ -213,10 +213,14 @@ def initialGuess(vel, data, errors=None, alpha=None, plot=False, mode='conv',
     mask3 = np.array(u4.copy()[1:] > 0., dtype='int')  # Positive 4th derivative
 
     if SNR2_thresh > 0.:
-        wsort = np.argsort(np.abs(u2))
+        # wsort = np.argsort(np.abs(u2))
         # RMS based in +-1 sigma fluctuations
-        RMSD2 = np.std(u2[wsort][0:int(0.5 * len(u2))]) / 0.377
+        # RMSD2 = np.std(u2[wsort][0:int(0.5 * len(u2))]) / 0.377
         # RMSD2 = np.std(u2[data < 2 * errors]) * 0.377
+
+        # noise level assuming Gaussian noise smoothed by a
+        # ricker wavelet
+        RMSD2 = np.sqrt(3 / (8 * np.sqrt(np.pi))) * (errors / alpha**2.5)
 
         say('Second derivative noise: {0}'.format(RMSD2), verbose)
         thresh2 = -RMSD2 * SNR2_thresh
