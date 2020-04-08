@@ -136,6 +136,11 @@ fourteenA_HI_file_dict = \
 fourteenA_wEBHIS_HI_file_dict = \
     find_dataproduct_names(fourteenA_HI_data_wEBHIS_path("", no_check=True))
 
+fifteenA_HI_file_dict = \
+  find_dataproduct_names(fifteenA_HI_BC_1_2kms_data_path("", no_check=True))
+fifteenA_HI_wEBHIS_HI_file_dict = \
+  find_dataproduct_names(fifteenA_HI_BC_1_2kms_data_wEBHIS_path("", no_check=True))
+
 fifteenA_HI_BCtaper_file_dict = \
   find_dataproduct_names(fifteenA_HI_BCtaper_04kms_data_path("", no_check=True))
 fifteenA_HI_BCtaper_wEBHIS_HI_file_dict = \
