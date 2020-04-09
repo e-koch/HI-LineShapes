@@ -29,7 +29,7 @@ run_BC = True
 
 run_fit = True
 run_neighbcheck = True
-run_writemodel = False
+run_writemodel = True
 
 if run_C:
     # 14B cube
@@ -175,10 +175,10 @@ if run_C:
 
 
 if run_BC:
-    # 14B cube
+    # 14B+17B cube
 
     # cube_name = fourteenB_wGBT_HI_file_dict['Cube']
-    cube_name = seventeenB_HI_data_1kms_wGBT_path("M33_14B-088_HI.clean.image.GBT_feathered.pbcov_gt_0.5_masked.fits")
+    cube_name = seventeenB_HI_data_1kms_wGBT_path("M33_14B_17B_HI_contsub_width_1kms.image.pbcor.GBT_feathered_K.fits")
 
 
     mask_name = seventeenB_1kms_wGBT_HI_file_dict['Source_Mask']
@@ -190,7 +190,7 @@ if run_BC:
 
     # Load in PB plane to account for varying uncertainty
     pb = fits.open(seventeenB_HI_data_1kms_path("M33_14B_17B_HI_contsub_width_1kms.pb.fits"), mode='denywrite')
-    pb_plane = pb[0].data.copy()
+    pb_plane = pb[0].data[0].copy()
     # pb_plane = pb_plane[nd.find_objects(pb_plane > 0.5)[-1]]
     del pb
 
@@ -239,8 +239,8 @@ if run_BC:
                         spatial_mask=spat_mask,
                         err_map=err_map,
                         vcent_map=None,
-                        num_cores=3,
-                        chunks=80000)
+                        num_cores=5,
+                        chunks=20000)
 
         # Save the parameters
 
