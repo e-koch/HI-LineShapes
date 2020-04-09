@@ -35,7 +35,7 @@ plotstyle_script = os.path.join(repo_path, "plotting_styles.py")
 exec(compile(open(plotstyle_script, "rb").read(), plotstyle_script, 'exec'))
 
 
-m31_multigauss_name = fifteenA_HI_BCtaper_04kms_data_wEBHIS_path("individ_multigaussian_gausspy_fits.fits")
+m31_multigauss_name = fifteenA_HI_BCtaper_04kms_data_wEBHIS_path("individ_multigaussian_gausspy_fits_neighbcheck2.fits")
 m31_multigauss_hdu = fits.open(m31_multigauss_name)
 
 m31_ngauss = np.isfinite(m31_multigauss_hdu[0].data).sum(0) // 3
@@ -48,7 +48,7 @@ m31_lwidths = m31_multigauss_hdu[0].data[2::3][:m31_maxgauss] * u.m / u.s
 m31_cents = m31_cents.to(u.km / u.s)
 m31_lwidths = m31_lwidths.to(u.km / u.s)
 
-m33_multigauss_name = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits.fits")
+m33_multigauss_name = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck2.fits")
 m33_multigauss_hdu = fits.open(m33_multigauss_name)
 
 m33_ngauss = np.isfinite(m33_multigauss_hdu[0].data).sum(0) // 3
@@ -250,4 +250,156 @@ ax.axvline(5 * noise_val.value * min_sig * np.sqrt(2 * np.pi),
 ax.grid(True)
 
 save_figure(fig, "m33_intint_rgal_hist")
+plt.close()
+
+
+# Split M33 line widths by radius.
+gal = Galaxy('M31')
+
+radii_m31 = gal.radius(header=m31_multigauss_hdu[2].header).to(u.kpc)
+
+bins = np.linspace(6, 20, 8) * u.kpc
+
+fig = plt.figure()
+
+ax = fig.add_subplot(111)
+
+max_val = 50 * u.km / u.s
+
+for i, (low, high) in enumerate(zip(bins[:-1], bins[1:])):
+
+    bin_locs = np.where(np.logical_and(radii_m31 >= low, radii_m31 < high))
+
+    lwidth_vals = []
+
+    for j in range(m31_lwidths.shape[0]):
+        lwidth_val = m31_lwidths[j][bin_locs].value
+        lwidth_vals.append(lwidth_val[np.isfinite(lwidth_val) &
+                                      (lwidth_val < max_val.value)])
+
+    lwidth_vals = np.hstack(lwidth_vals)
+
+    if i == 0:
+        cts_lw_rad, bin_edges_lw_rad = astro_hist(lwidth_vals,
+                                                  bins='knuth',
+                                                  density=True)
+    else:
+        cts_lw_rad, bin_edges_lw_rad = astro_hist(lwidth_vals,
+                                                  bins=bin_edges_lw_rad0,
+                                                  density=True)
+
+    if i == 0:
+        bin_edges_lw_rad0 = bin_edges_lw_rad
+        bin_centres_lw_rad = (bin_edges_lw_rad[1:] + bin_edges_lw_rad[:-1]) / 2.
+
+    ax.semilogy(bin_centres_lw_rad, cts_lw_rad,
+                drawstyle='steps-mid',
+                linestyle='-',
+                label=f"{int(low.value)}<R<{int(high.value)}")
+
+ax.legend(frameon=True, loc='upper right')
+
+ax.axvline(0.42, linestyle=':', color='k')
+ax.axvline(5 * 0.42, linestyle=':', color='k')
+ax.grid(True)
+
+ax.set_xlabel("Line width (km / s)")
+
+save_figure(fig, "m31_linewidth_rgal_hist")
+plt.close()
+
+fig = plt.figure()
+
+ax = fig.add_subplot(111)
+
+for i, (low, high) in enumerate(zip(bins[:-1], bins[1:])):
+
+    bin_locs = np.where(np.logical_and(radii >= low, radii < high))
+
+    amp_vals = []
+
+    for j in range(m31_amps.shape[0]):
+        amp_val = m31_amps[j][bin_locs].value
+        amp_vals.append(amp_val[np.isfinite(amp_val)])
+
+    amp_vals = np.hstack(amp_vals)
+
+    if i == 0:
+        cts_vc_rad, bin_edges_vc_rad = astro_hist(amp_vals,
+                                                  bins='knuth',
+                                                  density=True)
+    else:
+        cts_vc_rad, bin_edges_vc_rad = astro_hist(amp_vals,
+                                                  bins=bin_edges_vc_rad0,
+                                                  density=True)
+
+    if i == 0:
+        bin_edges_vc_rad0 = bin_edges_vc_rad
+        bin_centres_vc_rad = (bin_edges_vc_rad[1:] + bin_edges_vc_rad[:-1]) / 2.
+
+    ax.semilogy(bin_centres_vc_rad, cts_vc_rad,
+                drawstyle='steps-mid',
+                linestyle='-',
+                label=f"{int(low.value)}<R<{int(high.value)}")
+
+ax.legend(frameon=True, loc='upper right', ncol=2)
+
+ax.set_xlabel(f"Amplitude (K)")
+
+ax.axvline(noise_val.value, linestyle=':', color='k')
+ax.axvline(5 * noise_val.value, linestyle=':', color='k')
+ax.grid(True)
+
+save_figure(fig, "m31_amp_rgal_hist")
+plt.close()
+
+
+fig = plt.figure()
+
+ax = fig.add_subplot(111)
+
+for i, (low, high) in enumerate(zip(bins[:-1], bins[1:])):
+
+    bin_locs = np.where(np.logical_and(radii >= low, radii < high))
+
+    intint_vals = []
+
+    for j in range(m31_amps.shape[0]):
+        amp_val = m31_amps[j][bin_locs].value
+        lwidth_val = m31_lwidths[j][bin_locs].value
+        intint_val = np.sqrt(2 * np.pi) * amp_val * lwidth_val
+        # intint_val *= 0.0198  # Msol /pc^2
+        # intint_val *= np.cos(gal.inclination).value  # M33 inclination
+        intint_vals.append(intint_val[np.isfinite(amp_val)])
+
+    intint_vals = np.hstack(intint_vals)
+
+    if i == 0:
+        cts_vc_rad, bin_edges_vc_rad = astro_hist(intint_vals,
+                                                  bins='knuth',
+                                                  density=True)
+    else:
+        cts_vc_rad, bin_edges_vc_rad = astro_hist(intint_vals,
+                                                  bins=bin_edges_vc_rad0,
+                                                  density=True)
+
+    if i == 0:
+        bin_edges_vc_rad0 = bin_edges_vc_rad
+        bin_centres_vc_rad = (bin_edges_vc_rad[1:] + bin_edges_vc_rad[:-1]) / 2.
+
+    ax.semilogy(bin_centres_vc_rad, cts_vc_rad,
+                drawstyle='steps-mid',
+                linestyle='-',
+                label=f"{int(low.value)}<R<{int(high.value)}")
+
+ax.legend(frameon=True, loc='upper right', ncol=2)
+
+ax.set_xlabel(r"Integrated Intensity (K km s$^{-1}$)")
+
+min_sig = 5 * 0.42 / 2.35
+ax.axvline(5 * noise_val.value * min_sig * np.sqrt(2 * np.pi),
+           linestyle=':', color='k')
+ax.grid(True)
+
+save_figure(fig, "m31_intint_rgal_hist")
 plt.close()
