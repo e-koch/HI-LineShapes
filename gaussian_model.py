@@ -748,11 +748,11 @@ def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
     first being updated.
     '''
 
-    params_hdu = fits.open(params_name)
+    with fits.open(params_name, memmap=False, mode='denywrite') as params_hdu:
 
-    params_array = params_hdu[0].data
-    uncerts_array = params_hdu[1].data
-    bic_array = params_hdu[2].data
+        params_array = params_hdu[0].data
+        uncerts_array = params_hdu[1].data
+        bic_array = params_hdu[2].data
 
     ncomp_array = np.isfinite(params_array).sum(0) // 3
 
@@ -978,6 +978,10 @@ def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
     bics_hdu.header['BUNIT'] = ("", "Gaussian fit BIC")
 
     hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
+
+    del params_array
+    del uncerts_array
+    del bic_array
 
     return hdu_all
 
