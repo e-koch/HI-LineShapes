@@ -1282,16 +1282,14 @@ def subtract_components(cube_name,
     # Create huge fits
     ncomp_array = np.isfinite(params_array).sum(0) // 3
 
-    yposn, xposn = np.where(ncomp_array > 0)
-
     cube = SpectralCube.read(cube_name)
     assert cube.shape[1:] == params_array.shape[1:]
 
+    # yposn, xposn = np.where(ncomp_array > 0)
+    yposn, xposn = np.indices(cube.shape[1:])
+
     vels = cube.spectral_axis.to(u.m / u.s)
     vels_val = vels.value
-
-    # Number of pixels with valid fits.
-    yposn, xposn = np.where((ncomp_array > 0))
 
     yshape, xshape = ncomp_array.shape
 
@@ -1308,7 +1306,8 @@ def subtract_components(cube_name,
     hdu = fits.open(output_name, mode='update')
     cube_hdu = fits.open(cube_name, mode='denywrite')
 
-    for i, (y, x) in tqdm(enumerate(zip(yposn, xposn)),
+    for i, (y, x) in tqdm(enumerate(zip(yposn.ravel(),
+                                        xposn.ravel())),
                           ascii=True,
                           desc=f"Model eval. for: {basename[:15]}",
                           total=yposn.size):
@@ -1324,8 +1323,14 @@ def subtract_components(cube_name,
             del cube_hdu
             cube_hdu = fits.open(cube_name, mode='denywrite')
 
+        # No components = no change
+        if ncomp_array[y, x] == 0:
+            hdu[0].data[:, y, x] = cube_hdu[0].data[:, y, x]
+            continue
+
         pars = params_array[:, y, x][np.isfinite(params_array[:, y, x])]
-        hdu[0].data[:, y, x] = cube_hdu[0][:, y, x] - multigaussian_nolmfit(vels_val, pars)
+        hdu[0].data[:, y, x] = cube_hdu[0].data[:, y, x] - \
+            multigaussian_nolmfit(vels_val, pars)
 
     hdu.flush()
     hdu.close()
