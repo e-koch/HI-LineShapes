@@ -1040,8 +1040,11 @@ def save_fitmodel(cube_name, params_name,
     hdu.close()
 
 
-def remove_mw_components(params_name, vcent_name,
-                         delta_v=80 * u.km / u.s):
+def remove_mw_components(params_name,
+                         vcent_name,
+                         delta_v=80 * u.km / u.s,
+                         mwhi_mask=None,
+                         return_mwcomps=True):
     '''
     All components get fit, including MW contamination.
     This is mostly an issue for M31 in C and D configs.
@@ -1051,13 +1054,21 @@ def remove_mw_components(params_name, vcent_name,
 
     delta_v = delta_v.to(u.m / u.s)
 
-    params_hdu = fits.open(params_name)
+    with fits.open(params_name) as params_hdu:
 
-    params_array = params_hdu[0].data
-    uncert_array = params_hdu[1].data
-    bic_array = params_hdu[2].data
+        params_array = params_hdu[0].data
+        uncert_array = params_hdu[1].data
+        bic_array = params_hdu[2].data
 
     ncomp_array = np.isfinite(params_array).sum(0) // 3
+
+    max_comp = ncomp_array.max()
+
+    if return_mwcomps:
+        mwparams_array = np.ones((max_comp * 3,) +
+                                 params_array.shape[1:]) * np.NaN
+        mwuncert_array = np.ones((max_comp * 3,) +
+                                 params_array.shape[1:]) * np.NaN
 
     vcent = Projection.from_hdu(fits.open(vcent_name))
     assert vcent.shape == bic_array.shape
@@ -1077,7 +1088,9 @@ def remove_mw_components(params_name, vcent_name,
 
         vfits = params_array[1::3, y, x][:ncomp_array[y, x]]
 
-        valids = np.where(np.logical_and(vfits >= vmin, vfits <= vmax))[0]
+        valid_comps = np.logical_and(vfits >= vmin, vfits <= vmax)
+
+        valids = np.where(valid_comps)[0]
 
         for j, comp in enumerate(valids):
             new_params_array[3 * j, y, x] = params_array[3 * comp, y, x]
@@ -1087,6 +1100,118 @@ def remove_mw_components(params_name, vcent_name,
             new_uncert_array[3 * j, y, x] = uncert_array[3 * comp, y, x]
             new_uncert_array[3 * j + 1, y, x] = uncert_array[3 * comp + 1, y, x]
             new_uncert_array[3 * j + 2, y, x] = uncert_array[3 * comp + 2, y, x]
+
+        if return_mwcomps:
+            mwvalids = np.where(~valid_comps)[0]
+            for j, comp in enumerate(mwvalids):
+
+                mwparams_array[3 * j, y, x] = params_array[3 * comp, y, x]
+                mwparams_array[3 * j + 1, y, x] = params_array[3 * comp + 1, y, x]
+                mwparams_array[3 * j + 2, y, x] = params_array[3 * comp + 2, y, x]
+
+                mwuncert_array[3 * j, y, x] = uncert_array[3 * comp, y, x]
+                mwuncert_array[3 * j + 1, y, x] = uncert_array[3 * comp + 1, y, x]
+                mwuncert_array[3 * j + 2, y, x] = uncert_array[3 * comp + 2, y, x]
+
+    # Return a combined HDU that can be written out.
+    params_hdu = fits.PrimaryHDU(new_params_array, vcent.header.copy())
+    params_hdu.header['BUNIT'] = ("", "Gaussian fit parameters")
+
+    uncerts_hdu = fits.ImageHDU(new_uncert_array, vcent.header.copy())
+    uncerts_hdu.header['BUNIT'] = ("", "Gaussian fit uncertainty")
+
+    # Will need to update the BIC eventually...
+    # bics_hdu = fits.ImageHDU(bic_array, vcent.header.copy())
+    # bics_hdu.header['BUNIT'] = ("", "Gaussian fit BIC")
+
+    hdu_all = fits.HDUList([params_hdu, uncerts_hdu])
+    # hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
+
+    if return_mwcomps:
+        mwparams_hdu = fits.PrimaryHDU(mwparams_array, vcent.header.copy())
+        mwparams_hdu.header['BUNIT'] = ("", "Gaussian fit parameters")
+
+        mwuncerts_hdu = fits.ImageHDU(mwuncert_array, vcent.header.copy())
+        mwuncerts_hdu.header['BUNIT'] = ("", "Gaussian fit uncertainty")
+
+        hdu_mw = fits.HDUList([mwparams_hdu, mwuncerts_hdu])
+
+        return hdu_all, hdu_mw
+
+    return hdu_all
+
+
+def remove_faint_components(params_name,
+                            noise_val,
+                            return_faintcomps=True,
+                            min_lwidth_sub=25 * u.km / u.s,
+                            max_amp_sub_sigma=3.,
+                            logic_func=np.logical_or):
+    '''
+    Remove Gaussian components that are faint and/or wide from
+    a cube. This is to produce a cube whose spectra contain the
+    brightest component along the line-of-sight and then be fit
+    by the thick HI single-component model to specifically test
+    the shape of the brightest components.
+    '''
+
+    min_lwidth_sub = min_lwidth_sub.to(u.m / u.s)
+
+    assert noise_val.unit == u.K
+
+    max_peak = max_amp_sub_sigma * noise_val
+
+    with fits.open(params_name) as params_hdu:
+
+        params_array = params_hdu[0].data
+        uncert_array = params_hdu[1].data
+        bic_array = params_hdu[2].data
+
+    ncomp_array = np.isfinite(params_array).sum(0) // 3
+
+    max_comp = ncomp_array.max()
+
+    if return_faintcomps:
+        faint_params_array = np.ones((max_comp * 3,) +
+                                     params_array.shape[1:]) * np.NaN
+        faint_uncert_array = np.ones((max_comp * 3,) +
+                                     params_array.shape[1:]) * np.NaN
+
+    new_params_array = np.zeros_like(params_array) * np.NaN
+    new_uncert_array = np.zeros_like(params_array) * np.NaN
+
+    yposn, xposn = np.where(np.isfinite(bic_array) & (ncomp_array > 0))
+
+    for i, (y, x) in enumerate(zip(yposn, xposn)):
+
+        sig_fits = params_array[2::3, y, x][:ncomp_array[y, x]]
+        amp_fits = params_array[::3, y, x][:ncomp_array[y, x]]
+
+        valid_comps = logic_func(amp_fits >= max_peak.value,
+                                 sig_fits <= min_lwidth_sub.value)
+
+        valids = np.where(valid_comps)[0]
+
+        for j, comp in enumerate(valids):
+            new_params_array[3 * j, y, x] = params_array[3 * comp, y, x]
+            new_params_array[3 * j + 1, y, x] = params_array[3 * comp + 1, y, x]
+            new_params_array[3 * j + 2, y, x] = params_array[3 * comp + 2, y, x]
+
+            new_uncert_array[3 * j, y, x] = uncert_array[3 * comp, y, x]
+            new_uncert_array[3 * j + 1, y, x] = uncert_array[3 * comp + 1, y, x]
+            new_uncert_array[3 * j + 2, y, x] = uncert_array[3 * comp + 2, y, x]
+
+        if return_faintcomps:
+            faint_valids = np.where(~valid_comps)[0]
+            for j, comp in enumerate(faint_valids):
+
+                faint_params_array[3 * j, y, x] = params_array[3 * comp, y, x]
+                faint_params_array[3 * j + 1, y, x] = params_array[3 * comp + 1, y, x]
+                faint_params_array[3 * j + 2, y, x] = params_array[3 * comp + 2, y, x]
+
+                faint_uncert_array[3 * j, y, x] = uncert_array[3 * comp, y, x]
+                faint_uncert_array[3 * j + 1, y, x] = uncert_array[3 * comp + 1, y, x]
+                faint_uncert_array[3 * j + 2, y, x] = uncert_array[3 * comp + 2, y, x]
 
     # Return a combined HDU that can be written out.
     params_hdu = fits.PrimaryHDU(new_params_array, vcent.header.copy())
@@ -1101,10 +1226,57 @@ def remove_mw_components(params_name, vcent_name,
 
     hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
 
+    if return_faintcomps:
+        mwparams_hdu = fits.PrimaryHDU(mwparams_array, vcent.header.copy())
+        mwparams_hdu.header['BUNIT'] = ("", "Gaussian fit parameters")
+
+        mwuncerts_hdu = fits.ImageHDU(mwuncert_array, vcent.header.copy())
+        mwuncerts_hdu.header['BUNIT'] = ("", "Gaussian fit uncertainty")
+
+        hdu_mw = fits.HDUList([mwparams_hdu, mwuncerts_hdu])
+
+        return hdu_all, hdu_mw
+
     return hdu_all
 
 
-def calculate_bic_noMW():
+def remove_all_but_brightest(params_name,
+                             model_cube_name,
+                             noise_val,
+                             return_othercomps=True,
+                             min_lwidth_sub=25 * u.km / u.s,
+                             max_amp_sub_sigma=3.):
+    '''
+    This function will remove all components except those whose
+    intensity is a significant fraction of the brightest single peak.
+    '''
+    pass
+
+
+def subtract_components(cube_name,
+                        remove_params_name,
+                        output_cube_name,
+                        chunk_size=20000):
+    '''
+    Subtract Gaussian components given in remove_params_name
+    '''
+
+    with fits.open(remove_params_name) as params_hdu:
+
+        params_array = params_hdu[0].data
+        uncert_array = params_hdu[1].data
+        # bic_array = params_hdu[2].data
+
+    yposn, xposn = np.where(ncomp_array > 0)
+
+    ncomp_array = np.isfinite(params_array).sum(0) // 3
+
+    # Create huge fits
+
+    # evaluate and subtract all components
+
+
+def recalculate_bic():
     '''
     Add a function to recompute the BIC after masking all MW emission.
     '''
