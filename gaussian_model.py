@@ -1269,7 +1269,7 @@ def remove_all_but_brightest(params_name,
 
 def subtract_components(cube_name,
                         remove_params_name,
-                        output_cube_name,
+                        output_name,
                         chunk_size=20000):
     '''
     Subtract Gaussian components given in remove_params_name
@@ -1278,16 +1278,61 @@ def subtract_components(cube_name,
     with fits.open(remove_params_name) as params_hdu:
 
         params_array = params_hdu[0].data
-        uncert_array = params_hdu[1].data
-        # bic_array = params_hdu[2].data
+
+    # Create huge fits
+    ncomp_array = np.isfinite(params_array).sum(0) // 3
 
     yposn, xposn = np.where(ncomp_array > 0)
 
-    ncomp_array = np.isfinite(params_array).sum(0) // 3
+    cube = SpectralCube.read(cube_name)
+    assert cube.shape[1:] == params_array.shape[0]
 
-    # Create huge fits
+    vels = cube.spectral_axis.to(u.m / u.s)
+    vels_val = vels.value
+
+    # Number of pixels with valid fits.
+    yposn, xposn = np.where((ncomp_array > 0))
+
+    yshape, xshape = ncomp_array.shape
+
+    basename = os.path.basename(cube_name)
+
+    # Create the output cube.
+    from cube_analysis.io_utils import create_huge_fits
+    create_huge_fits(output_name, cube.header, fill_nan=True)
+
+    del cube
 
     # evaluate and subtract all components
+
+    hdu = fits.open(output_name, mode='update')
+    cube_hdu = fits.open(cube_name, mode='denywrite')
+
+    for i, (y, x) in tqdm(enumerate(zip(yposn, xposn)),
+                          ascii=True,
+                          desc=f"Model eval. for: {basename[:15]}",
+                          total=yposn.size):
+
+        # Reload cube to release memory
+        if i % chunk_size == 0:
+            hdu.flush()
+            hdu.close()
+            del hdu
+            hdu = fits.open(output_name, mode='update')
+
+            cube_hdu.close()
+            del cube_hdu
+            cube_hdu = fits.open(cube_name, mode='denywrite')
+
+        pars = params_array[:, y, x][np.isfinite(params_array[:, y, x])]
+        hdu[0].data[:, y, x] = cube_hdu[0][:, y, x] - multigaussian_nolmfit(vels_val, pars)
+
+    hdu.flush()
+    hdu.close()
+    del hdu
+
+    cube_hdu.close()
+    del cube_hdu
 
 
 def recalculate_bic():
