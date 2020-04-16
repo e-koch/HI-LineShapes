@@ -1285,7 +1285,7 @@ def subtract_components(cube_name,
     yposn, xposn = np.where(ncomp_array > 0)
 
     cube = SpectralCube.read(cube_name)
-    assert cube.shape[1:] == params_array.shape[0]
+    assert cube.shape[1:] == params_array.shape[1:]
 
     vels = cube.spectral_axis.to(u.m / u.s)
     vels_val = vels.value
