@@ -24,6 +24,7 @@ from spectral_cube import SpectralCube, Projection
 import astropy.units as u
 import matplotlib.pyplot as plt
 from astropy.convolution import convolve_fft, Gaussian1DKernel
+import scipy.ndimage as nd
 
 from cube_analysis.spectral_fitting import sample_at_channels
 
@@ -1042,6 +1043,7 @@ def save_fitmodel(cube_name, params_name,
 
 def remove_mw_components(params_name,
                          vcent_name,
+                         cube_name=None,
                          delta_v=80 * u.km / u.s,
                          logic_func=np.logical_and,
                          mwhi_mask=None,
@@ -1061,6 +1063,12 @@ def remove_mw_components(params_name,
         only flag MW components red-shifted of the source,
         `lambda: data, great, less: data >= great`.
     '''
+
+    if cube_name is not None:
+        cube = SpectralCube.read(cube_name)
+        vels = cube.spectral_axis.to(u.m / u.s).value
+
+        del cube
 
     delta_v = delta_v.to(u.m / u.s)
 
@@ -1099,6 +1107,33 @@ def remove_mw_components(params_name,
         vfits = params_array[1::3, y, x][:ncomp_array[y, x]]
 
         valid_comps = logic_func(vfits >= vmin, vfits <= vmax)
+
+        # Check against interactive mask
+        if mwhi_mask is not None:
+            mask_spec = mwhi_mask[:, y, x]
+
+            ranges = nd.find_objects(mask_spec)[0]
+
+            inrange = np.zeros_like(vfits, dtype=bool)
+
+            # Check whether each component is within a valid range
+            for k, vf in enumerate(vfits):
+
+                for rg in ranges:
+
+                    min_vel = vels[rg.start]
+                    max_vel = vels[rg.stop - 1]
+
+                    if min_vel > max_vel:
+                        max_vel, min_vel = min_vel, max_vel
+
+                    isvalid = np.logical_and(vf >= min_vel, vf <= max_vel)
+
+                    if isvalid:
+                        inrange[k] = True
+                        break
+
+            valid_comps = np.logical_or(valid_comps, inrange)
 
         valids = np.where(valid_comps)[0]
 
