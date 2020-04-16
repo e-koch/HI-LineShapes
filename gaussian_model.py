@@ -1043,6 +1043,7 @@ def save_fitmodel(cube_name, params_name,
 def remove_mw_components(params_name,
                          vcent_name,
                          delta_v=80 * u.km / u.s,
+                         logic_func=np.logical_and,
                          mwhi_mask=None,
                          return_mwcomps=True):
     '''
@@ -1050,6 +1051,15 @@ def remove_mw_components(params_name,
     This is mostly an issue for M31 in C and D configs.
     This function only keeps components that are likely
     to be part of the galaxy.
+
+    Parameters
+    ----------
+    logic_func: function, optional
+        Defaults to `np.logical_and`. Otherwise, a custom
+        function can be given with three inputs for the data,
+        greater condition, lesser condition. For example, to
+        only flag MW components red-shifted of the source,
+        `lambda: data, great, less: data >= great`.
     '''
 
     delta_v = delta_v.to(u.m / u.s)
@@ -1088,7 +1098,7 @@ def remove_mw_components(params_name,
 
         vfits = params_array[1::3, y, x][:ncomp_array[y, x]]
 
-        valid_comps = np.logical_and(vfits >= vmin, vfits <= vmax)
+        valid_comps = logic_func(vfits >= vmin, vfits <= vmax)
 
         valids = np.where(valid_comps)[0]
 
@@ -1167,6 +1177,8 @@ def remove_faint_components(params_name,
         uncert_array = params_hdu[1].data
         bic_array = params_hdu[2].data
 
+        params_header = params_hdu[0].header
+
     ncomp_array = np.isfinite(params_array).sum(0) // 3
 
     max_comp = ncomp_array.max()
@@ -1214,23 +1226,25 @@ def remove_faint_components(params_name,
                 faint_uncert_array[3 * j + 2, y, x] = uncert_array[3 * comp + 2, y, x]
 
     # Return a combined HDU that can be written out.
-    params_hdu = fits.PrimaryHDU(new_params_array, vcent.header.copy())
+    params_hdu = fits.PrimaryHDU(new_params_array, params_header.copy())
     params_hdu.header['BUNIT'] = ("", "Gaussian fit parameters")
 
-    uncerts_hdu = fits.ImageHDU(new_uncert_array, vcent.header.copy())
+    uncerts_hdu = fits.ImageHDU(new_uncert_array, params_header.copy())
     uncerts_hdu.header['BUNIT'] = ("", "Gaussian fit uncertainty")
 
     # Will need to update the BIC eventually...
-    bics_hdu = fits.ImageHDU(bic_array, vcent.header.copy())
+    bics_hdu = fits.ImageHDU(bic_array, params_header.copy())
     bics_hdu.header['BUNIT'] = ("", "Gaussian fit BIC")
 
     hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
 
     if return_faintcomps:
-        mwparams_hdu = fits.PrimaryHDU(mwparams_array, vcent.header.copy())
+        mwparams_hdu = fits.PrimaryHDU(faint_params_array,
+                                       params_header.copy())
         mwparams_hdu.header['BUNIT'] = ("", "Gaussian fit parameters")
 
-        mwuncerts_hdu = fits.ImageHDU(mwuncert_array, vcent.header.copy())
+        mwuncerts_hdu = fits.ImageHDU(faint_uncert_array,
+                                      params_header.copy())
         mwuncerts_hdu.header['BUNIT'] = ("", "Gaussian fit uncertainty")
 
         hdu_mw = fits.HDUList([mwparams_hdu, mwuncerts_hdu])
