@@ -1041,16 +1041,17 @@ def save_fitmodel(cube_name, params_name,
     hdu.close()
 
 
-def remove_mw_components(params_name,
-                         vcent_name,
-                         cube_name=None,
-                         delta_v=80 * u.km / u.s,
-                         logic_func=np.logical_and,
-                         mwhi_mask=None,
-                         return_mwcomps=True):
+def remove_offrot_components(params_name,
+                             vcent_name,
+                             cube_name=None,
+                             delta_v=80 * u.km / u.s,
+                             logic_func=np.logical_and,
+                             mwhi_mask=None,
+                             return_mwcomps=True):
     '''
-    All components get fit, including MW contamination.
-    This is mostly an issue for M31 in C and D configs.
+    All components get fit, including MW contamination
+    and other off-rotation features.
+    The MW is mostly an issue for M31 in C and D configs.
     This function only keeps components that are likely
     to be part of the galaxy.
 
@@ -1293,14 +1294,185 @@ def remove_all_but_brightest(params_name,
                              model_cube_name,
                              noise_val,
                              return_othercomps=True,
-                             min_lwidth_sub=25 * u.km / u.s,
-                             max_amp_sub_sigma=3.):
+                             min_temp=25 * u.K,
+                             max_lwidth_sub=25 * u.km / u.s,):
     '''
     This function will remove all components except those whose
     intensity is a significant fraction of the brightest single peak.
     '''
     pass
 
+
+def find_distinct_features(params_name,
+                           cube_name,
+                           noise_val,
+                           return_blendcomps=True,
+                           nsigma=5.,
+                           max_chan_diff=3,
+                           secderiv_fraction=0.75):
+    '''
+    This function will remove all components except those whose
+    intensity is a significant fraction of the brightest single peak.
+    '''
+
+    assert noise_val.unit == u.K
+
+    with fits.open(params_name) as params_hdu:
+
+        params_array = params_hdu[0].data
+        uncert_array = params_hdu[1].data
+        bic_array = params_hdu[2].data
+
+        params_header = params_hdu[0].header
+
+    ncomp_array = np.isfinite(params_array).sum(0) // 3
+
+    max_comp = ncomp_array.max()
+
+    if return_blendcomps:
+        blend_params_array = np.ones((max_comp * 3,) +
+                                     params_array.shape[1:]) * np.NaN
+        blend_uncert_array = np.ones((max_comp * 3,) +
+                                     params_array.shape[1:]) * np.NaN
+
+    keep_params_array = np.zeros_like(params_array) * np.NaN
+    keep_uncert_array = np.zeros_like(params_array) * np.NaN
+
+    yposn, xposn = np.where(np.isfinite(bic_array) & (ncomp_array > 0))
+
+    cube = SpectralCube.read(cube_name)
+    vels = cube.spectral_axis.to(u.m / u.s).value
+    del cube
+
+    for i, (y, x) in enumerate(zip(yposn, xposn)):
+
+        ncomp = ncomp_array[y, x]
+
+        params = params_array[:3 * ncomp, y, x]
+        uncerts = uncert_array[:3 * ncomp, y, x]
+
+        mod_spec = multigaussian_nolmfit(vels, params)
+
+        bright_regions = np.where(mod_spec > nsigma * noise_val)[0]
+
+        diffs = np.diff(bright_regions)
+
+        bright_regions_split = np.array_split(bright_regions,
+                                              np.where(diffs != 1)[0])
+
+        # Pick the brightest region:
+        for i, region in enumerate(bright_regions_split):
+
+            max_val_reg = np.nanmax(mod_spec[region])
+
+            if i == 0:
+                max_val = max_val_reg
+                regnum = 0
+                continue
+
+            if max_val_reg > max_val:
+                max_val = max_val_reg
+                regnum = i
+
+        bright_region = bright_regions_split[regnum]
+
+        # Identify peaks in total model
+        deriv1 = np.gradient(mod_spec)
+        deriv2 = np.gradient(deriv1)
+        deriv3 = np.gradient(deriv2)
+
+        zeros = np.abs(np.diff(np.sign(deriv3))) > 0
+
+        mask_peaks = np.logical_and(deriv2[bright_region] < 0.,
+                                    zeros[bright_region])
+        peaks = np.where(mask_peaks)[0] + bright_region[0] + 1
+
+        cent_chans = np.array([cube.closest_spectral_channel(cent * u.m / u.s)
+                               for cent in params[1::3]])
+
+        # Determine a peaks independence by the ratio of the 2nd derivative
+        # of that component vs. the whole model.
+        keeps = []
+
+        for peak in peaks:
+
+            diff_chan = np.abs(cent_chans - peak)
+
+            min_diff = diff_chan.min()
+
+            if min_diff > max_chan_diff:
+                continue
+
+            match = diff_chan.argmin()
+
+            mod_comp = multigaussian_nolmfit(vels, params[3 * match:3 * match + 3])
+
+            diff2_comp = np.gradient(np.gradient(mod_comp))
+
+            # Now check the ratio between the 2nd deriv minima
+            diff2_frac = deriv2[peak] / diff2_comp[cent_chans[match]]
+
+            if diff2_frac >= secderiv_fraction:
+                keeps.append(match)
+
+        # Could have duplicates. Fail here is this happens so I can check
+        if len(np.unique(keeps)) != len(keeps):
+            ValueError("Duplicates shouldn't really happen!"
+                       " You should check this.")
+
+        for k, comp in enumerate(keeps):
+            keep_params_array[3 * k:3 * k + 3] = params[3 * comp:3 * comp + 3]
+            keep_uncert_array[3 * k:3 * k + 3] = uncerts[3 * comp:3 * comp + 3]
+
+        if return_blendcomps:
+            blends = list(set(range(ncomp)) - set(keeps))
+
+            for k, comp in enumerate(blends):
+                blend_params_array[3 * k:3 * k + 3] = params[3 * comp:3 * comp + 3]
+                blend_uncert_array[3 * k:3 * k + 3] = uncerts[3 * comp:3 * comp + 3]
+
+    # Return a combined HDU that can be written out.
+    params_hdu = fits.PrimaryHDU(keep_params_array, params_header.copy())
+    params_hdu.header['BUNIT'] = ("", "Gaussian fit parameters")
+
+    uncerts_hdu = fits.ImageHDU(keep_uncert_array, params_header.copy())
+    uncerts_hdu.header['BUNIT'] = ("", "Gaussian fit uncertainty")
+
+    # Will need to update the BIC eventually...
+    # bics_hdu = fits.ImageHDU(bic_array, params_header.copy())
+    # bics_hdu.header['BUNIT'] = ("", "Gaussian fit BIC")
+
+    # hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
+    hdu_all = fits.HDUList([params_hdu, uncerts_hdu])
+
+    if return_blendcomps:
+        blendparams_hdu = fits.PrimaryHDU(blend_params_array,
+                                          params_header.copy())
+        blendparams_hdu.header['BUNIT'] = ("", "Gaussian fit parameters")
+
+        blenduncerts_hdu = fits.ImageHDU(blend_uncert_array,
+                                         params_header.copy())
+        blenduncerts_hdu.header['BUNIT'] = ("", "Gaussian fit uncertainty")
+
+        hdu_mw = fits.HDUList([blendparams_hdu, blenduncerts_hdu])
+
+        return hdu_all, hdu_mw
+
+    return hdu_all
+
+
+def find_bright_narrow(params_name,
+                       model_cube_name,
+                       noise_val,
+                       return_othercomps=True,
+                       min_temp=25 * u.K,
+                       max_lwidth_sub=25 * u.km / u.s,
+                       max_amp_sub_sigma=3.):
+    '''
+    This function will remove all components except those whose
+    intensity is a significant fraction of the brightest single peak.
+    '''
+    pass
 
 def subtract_components(cube_name,
                         remove_params_name,
