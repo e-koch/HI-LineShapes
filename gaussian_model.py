@@ -1321,7 +1321,10 @@ def find_distinct_features(params_name,
 
         params_array = params_hdu[0].data
         uncert_array = params_hdu[1].data
-        bic_array = params_hdu[2].data
+        if len(params_hdu) > 2:
+            bic_array = params_hdu[2].data
+        else:
+            bic_array = None
 
         params_header = params_hdu[0].header
 
@@ -1338,11 +1341,13 @@ def find_distinct_features(params_name,
     keep_params_array = np.zeros_like(params_array) * np.NaN
     keep_uncert_array = np.zeros_like(params_array) * np.NaN
 
-    yposn, xposn = np.where(np.isfinite(bic_array) & (ncomp_array > 0))
+    if bic_array is None:
+        yposn, xposn = np.where(ncomp_array > 0)
+    else:
+        yposn, xposn = np.where(np.isfinite(bic_array) & (ncomp_array > 0))
 
     cube = SpectralCube.read(cube_name)
     vels = cube.spectral_axis.to(u.m / u.s).value
-    del cube
 
     for i, (y, x) in enumerate(zip(yposn, xposn)):
 
@@ -1353,15 +1358,24 @@ def find_distinct_features(params_name,
 
         mod_spec = multigaussian_nolmfit(vels, params)
 
-        bright_regions = np.where(mod_spec > nsigma * noise_val)[0]
+        if mod_spec.max() <= nsigma * noise_val.value:
+            continue
+
+        bright_regions = np.where(mod_spec > nsigma * noise_val.value)[0]
 
         diffs = np.diff(bright_regions)
 
         bright_regions_split = np.array_split(bright_regions,
-                                              np.where(diffs != 1)[0])
+                                              np.where(diffs != 1)[0] + 1)
+
+        if len(bright_regions_split) == 0:
+            raise ValueError("No valid regions found. But not skipped.")
 
         # Pick the brightest region:
         for i, region in enumerate(bright_regions_split):
+
+            if len(region) == 0:
+                continue
 
             max_val_reg = np.nanmax(mod_spec[region])
 
@@ -1421,15 +1435,17 @@ def find_distinct_features(params_name,
                        " You should check this.")
 
         for k, comp in enumerate(keeps):
-            keep_params_array[3 * k:3 * k + 3] = params[3 * comp:3 * comp + 3]
-            keep_uncert_array[3 * k:3 * k + 3] = uncerts[3 * comp:3 * comp + 3]
+            keep_params_array[3 * k:3 * k + 3, y, x] = params[3 * comp:3 * comp + 3]
+            keep_uncert_array[3 * k:3 * k + 3, y, x] = uncerts[3 * comp:3 * comp + 3]
 
         if return_blendcomps:
             blends = list(set(range(ncomp)) - set(keeps))
 
             for k, comp in enumerate(blends):
-                blend_params_array[3 * k:3 * k + 3] = params[3 * comp:3 * comp + 3]
-                blend_uncert_array[3 * k:3 * k + 3] = uncerts[3 * comp:3 * comp + 3]
+                blend_params_array[3 * k:3 * k + 3, y, x] = params[3 * comp:3 * comp + 3]
+                blend_uncert_array[3 * k:3 * k + 3, y, x] = uncerts[3 * comp:3 * comp + 3]
+
+    del cube
 
     # Return a combined HDU that can be written out.
     params_hdu = fits.PrimaryHDU(keep_params_array, params_header.copy())
@@ -1545,10 +1561,3 @@ def subtract_components(cube_name,
 
     cube_hdu.close()
     del cube_hdu
-
-
-def recalculate_bic():
-    '''
-    Add a function to recompute the BIC after masking all MW emission.
-    '''
-    pass
