@@ -126,7 +126,7 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
 
 def compare_optthick_over_cube(cube_name, params_thickHI_name,
                                params_multigauss_name,
-                               noise_val,
+                               noise_map,
                                tau_min=0.5,
                                gausscomp_frac=0.25,
                                chunk_size=80000):
@@ -191,7 +191,7 @@ def compare_optthick_over_cube(cube_name, params_thickHI_name,
 
         out = compare_optthick_residual(spec, params_thickHI[:, y, x],
                                         params_mg,
-                                        noise_val,
+                                        noise_map[y, x],
                                         vels=vels,
                                         tau_min=tau_min,
                                         gausscomp_frac=gausscomp_frac)
