@@ -49,6 +49,7 @@ def recalculate_bic(spec, spec_model, noise_val, Npar, mask=None):
 def compare_optthick_residual(spec, params_thickHI, params_multigauss,
                               noise_val,
                               vels=None, tau_min=0.5,
+                              min_pts=25,
                               gausscomp_frac=0.25,):
     '''
     Compare the thick and multi-Gauss model but only where tau is
@@ -58,6 +59,10 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
     ----------
     tau_min : float, optional
         Minimum tau to consider in flattened-tops. Default is 0.5.
+    min_pts : int, optional
+        Minimum number of points required for the comparison. NaNs are
+        returned when there are not enough points above the `min_tau`.
+        Default is 25.
     gausscomp_frac : float, optional
         Include a Gaussian component within the `tau_mask` region when
         its area within the region exceed this fraction. Default is 0.25.
@@ -92,6 +97,9 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
     if tau_mask.sum(0) == 0:
         raise ValueError("tau_min exceeds all tau values.")
 
+    if tau_mask.sum(0) < min_pts:
+        return [np.NaN] * 5
+
     # chisq_thickHI = np.nansum((spec.value[tau_mask] - mod_thickHI[tau_mask])**2 / noise_val.value**2)
     # chisq_multigauss = np.nansum((spec.value[tau_mask] - mod_multigauss[tau_mask])**2 / noise_val.value**2)
 
@@ -121,13 +129,22 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
     bic_multigauss = recalculate_bic(spec, mod_multigauss, noise_val,
                                      Ncomp_region * 3, mask=tau_mask)
 
-    return bic_thickHI, bic_multigauss
+    # Also compute the optically-thin limit to estimate amount
+    # of integrated intensity lost in the thick model
+    par = np.array([params_thickHI[2], params_thickHI[3],
+                    params_thickHI[1]])
+    mod_thickHI_thinlimit = multigaussian_nolmfit(vels, par)
+    missing_intint = (mod_thickHI_thinlimit - mod_thickHI)[tau_mask].sum()
+
+    return (bic_thickHI, bic_multigauss, tau_mask.sum(),
+            Ncomp_region, missing_intint)
 
 
 def compare_optthick_over_cube(cube_name, params_thickHI_name,
                                params_multigauss_name,
                                noise_map,
                                tau_min=0.5,
+                               min_pts=25,
                                gausscomp_frac=0.25,
                                chunk_size=80000):
     '''
@@ -153,14 +170,17 @@ def compare_optthick_over_cube(cube_name, params_thickHI_name,
 
     cube = SpectralCube.read(cube_name)
     assert cube.shape[1:] == params_thickHI.shape[1:]
-    vels = cube.spectral_axis.to(u.km / u.s).value
-    del cube._data
-    del cube
+    vels = cube.spectral_axis.to(u.m / u.s)
 
     yposn, xposn = np.indices(cube.shape[1:])
 
     # Output array for recalculated BICs
-    out_bics = np.zeros((2,) + cube.shape[1:]) * np.NaN
+    # Last image is to return the number of points used in the
+    # comparison
+    out_bics = np.zeros((5,) + cube.shape[1:]) * np.NaN
+
+    del cube._data
+    del cube
 
     cube_hdu = fits.open(cube_name, mode='denywrite')
 
@@ -174,19 +194,24 @@ def compare_optthick_over_cube(cube_name, params_thickHI_name,
         if i % chunk_size == 0:
 
             cube_hdu.close()
-            del cube_hdu.data
+            del cube_hdu[0].data
             del cube_hdu
             cube_hdu = fits.open(cube_name, mode='denywrite')
 
-        if np.isfinite(taupeak_map[y, x]):
+        if np.isnan(taupeak_map[y, x]):
             continue
 
-        if taupeak_map[y, x] < tau_min:
+        # I got a weird rounding error. Bump up comparison by epsilon.
+        if taupeak_map[y, x] < tau_min + 1e-3:
             continue
 
         spec = cube_hdu[0].data[:, y, x] * u.K
 
         params_mg = params_multigauss[:, y, x]
+
+        if np.isnan(params_mg).all():
+            continue
+
         params_mg = params_mg[np.isfinite(params_mg)]
 
         out = compare_optthick_residual(spec, params_thickHI[:, y, x],
@@ -194,12 +219,30 @@ def compare_optthick_over_cube(cube_name, params_thickHI_name,
                                         noise_map[y, x],
                                         vels=vels,
                                         tau_min=tau_min,
+                                        min_pts=min_pts,
                                         gausscomp_frac=gausscomp_frac)
 
         out_bics[:, y, x] = out
+
+    del cube_hdu[0].data
+    del cube_hdu
 
     # Output an HDU to keep the WCS info
     hdu_bic_thickHI = fits.PrimaryHDU(out_bics[0], params_hdr)
     hdu_bic_mg = fits.ImageHDU(out_bics[1], params_hdr)
 
-    return fits.HDUList([hdu_bic_thickHI, hdu_bic_mg])
+    # Number of channels used in estimate
+    hdu_npts = fits.ImageHDU(out_bics[2], params_hdr)
+
+    # Number of Gaussian components within region
+    hdu_gcomp = fits.ImageHDU(out_bics[3], params_hdr)
+
+    # Apparent missing integrated intensity from the optically thick
+    # model.
+    hdu_miss = fits.ImageHDU(out_bics[4], params_hdr)
+
+    # Record the peak taus for quick access
+    hdu_peaktau = fits.ImageHDU(taupeak_map, params_hdr)
+
+    return fits.HDUList([hdu_bic_thickHI, hdu_bic_mg, hdu_npts,
+                         hdu_gcomp, hdu_miss, hdu_peaktau])
