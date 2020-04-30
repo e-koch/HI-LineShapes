@@ -93,6 +93,13 @@ def isoturbHI_simple(x, Ts, sigma, Tpeak, vcent):
 
     '''
 
+    tau = tau_func(x, Ts, sigma, Tpeak, vcent)
+
+    return Ts * (1 - np.exp(-tau))
+
+
+def tau_func(x, Ts, sigma, Tpeak, vcent):
+
     # sigma_th =0.093 * Ts**0.5
     # sigma_th_sq = 0.093**2 * Ts
     # sigmasq = (sigma_th_sq + sigma_nt**2)
@@ -102,8 +109,7 @@ def isoturbHI_simple(x, Ts, sigma, Tpeak, vcent):
     tau_prefac = Tpeak / Ts
 
     tau = tau_prefac * exp_term
-
-    return Ts * (1 - np.exp(-tau))
+    return tau
 
 
 def residual(pars, x, data, err):
@@ -126,11 +132,13 @@ def fit_isoturbHI_model_simple(vels, spec, vcent, delta_vcent=5 * u.km / u.s,
 
     # Create the parameter list.
     pfit = Parameters()
-    pfit.add(name='Ts', value=100., min=10**1.2, max=8000)
+    # pfit.add(name='Ts', value=100., min=10**1.2, max=8000)
+    pfit.add(name='Ts', value=np.nanmax(spec.value),
+             min=10**1.2, max=8000)
     pfit.add(name='sigma', value=15., min=0.30, max=31.6)  # min v at Ts=16 K
     # pfit.add(name='log_NH', value=21., min=20., max=23.5)
     pfit.add(name='Tpeak', value=np.nanmax(spec.value), min=0,
-             max=1.1 * np.nanmax(spec.value))
+             max=5. * np.nanmax(spec.value))
     pfit.add(name='vcent', value=vcent.to(vels.unit).value,
              min=vel_min, max=vel_max)
 
