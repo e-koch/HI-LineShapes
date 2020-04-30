@@ -29,98 +29,99 @@ run_BC = False
 
 # Enable to limit the thick HI vel. centroid to \pm 5 km/s
 # of the centroid velocity.
-with_vcent_constraint = True
-
-if with_vcent_constraint:
-    delta_vcent = 5 * u.km / u.s
-else:
-    delta_vcent = 80 * u.km / u.s
 
 if run_C:
     # 14B cube
 
-    # cube_name = fourteenB_wGBT_HI_file_dict['Cube']
-    cube_name = fourteenB_HI_data_wGBT_path("M33_14B-088_HI.clean.image.GBT_feathered.pbcov_gt_0.5_masked.fits")
+    for with_vcent_constraint in [True, False]:
 
-    # Create a downsampled version of the cube with 0.42 km/s channels.
-    # This will match the M31 spectral resolution.
-    downsamp_cube_name = f"{cube_name.rstrip('.fits')}_0p42kms_K.fits"
+        if with_vcent_constraint:
+            delta_vcent = 5 * u.km / u.s
+        else:
+            delta_vcent = 80 * u.km / u.s
 
-    if not os.path.exists(downsamp_cube_name):
+        # cube_name = fourteenB_wGBT_HI_file_dict['Cube']
+        cube_name = fourteenB_HI_data_wGBT_path("M33_14B-088_HI.clean.image.GBT_feathered.pbcov_gt_0.5_masked.fits")
 
-        if not os.path.exists(f"{cube_name.rstrip('.fits')}_K.fits"):
-            convert_K(cube_name,
-                      fourteenB_HI_data_wGBT_path(""),
-                      verbose=True)
+        # Create a downsampled version of the cube with 0.42 km/s channels.
+        # This will match the M31 spectral resolution.
+        downsamp_cube_name = f"{cube_name.rstrip('.fits')}_0p42kms_K.fits"
 
-        spectral_interpolate(f"{cube_name.rstrip('.fits')}_K.fits",
-                             downsamp_cube_name,
-                             2, verbose=True)
+        if not os.path.exists(downsamp_cube_name):
 
-    mask_name = fourteenB_wGBT_HI_file_dict['Source_Mask']
-    mask_hdu = fits.open(mask_name)[0]
+            if not os.path.exists(f"{cube_name.rstrip('.fits')}_K.fits"):
+                convert_K(cube_name,
+                          fourteenB_HI_data_wGBT_path(""),
+                          verbose=True)
 
-    # We'll keep all positions with 10 pixels in the mask for the
-    # downsampled cube (so 2x the original cube channels)
-    spat_mask = mask_hdu.data.sum(0) > 20
+            spectral_interpolate(f"{cube_name.rstrip('.fits')}_K.fits",
+                                 downsamp_cube_name,
+                                 2, verbose=True)
 
-    del mask_hdu
+        mask_name = fourteenB_wGBT_HI_file_dict['Source_Mask']
+        mask_hdu = fits.open(mask_name)[0]
 
-    # Load in PB plane to account for varying uncertainty
-    pb = fits.open(fourteenB_HI_data_path("M33_14B-088_pbcov.fits"), mode='denywrite')
-    # pb_plane = pb[0].data[0].copy()
-    pb_plane = pb[0].data.copy()
-    pb_plane = pb_plane[nd.find_objects(pb_plane > 0.5)[-1]]
-    pb_plane[pb_plane < 0.5] = np.NaN
-    del pb
+        # We'll keep all positions with 10 pixels in the mask for the
+        # downsampled cube (so 2x the original cube channels)
+        spat_mask = mask_hdu.data.sum(0) > 20
 
-    # Need peak temp and centroid maps.
+        del mask_hdu
 
-    peak_name = fourteenB_wGBT_HI_file_dict['PeakTemp']
-    peaktemp = Projection.from_hdu(fits.open(peak_name))
+        # Load in PB plane to account for varying uncertainty
+        pb = fits.open(fourteenB_HI_data_path("M33_14B-088_pbcov.fits"), mode='denywrite')
+        # pb_plane = pb[0].data[0].copy()
+        pb_plane = pb[0].data.copy()
+        pb_plane = pb_plane[nd.find_objects(pb_plane > 0.5)[-1]]
+        pb_plane[pb_plane < 0.5] = np.NaN
+        del pb
 
-    vcent_name = fourteenB_wGBT_HI_file_dict['Moment1']
-    vcent = Projection.from_hdu(fits.open(vcent_name)).to(u.km / u.s)
+        # Need peak temp and centroid maps.
 
-    # Noise lowered for the downsampled cube.
-    noise_val = 2.8 * u.K / np.sqrt(2)
+        peak_name = fourteenB_wGBT_HI_file_dict['PeakTemp']
+        peaktemp = Projection.from_hdu(fits.open(peak_name))
 
-    err_map = noise_val / pb_plane
+        vcent_name = fourteenB_wGBT_HI_file_dict['Moment1']
+        vcent = Projection.from_hdu(fits.open(vcent_name)).to(u.km / u.s)
 
-    params_array, uncerts_array, bic_array = \
-        cube_fitter(downsamp_cube_name, fit_func_simple,
-                    mask_name=None,
-                    npars=4,
-                    args=(),
-                    kwargs={'downsamp_factor': 1,
-                            'min_finite_chan': 30,
-                            "delta_vcent": delta_vcent},
-                    spatial_mask=spat_mask,
-                    err_map=err_map,
-                    vcent_map=vcent,
-                    num_cores=6,
-                    chunks=80000)
+        # Noise lowered for the downsampled cube.
+        noise_val = 2.8 * u.K / np.sqrt(2)
 
-    # Save the parameters
+        err_map = noise_val / pb_plane
 
-    params_hdu = fits.PrimaryHDU(params_array, vcent.header.copy())
-    params_hdu.header['BUNIT'] = ("", "Simple thick HI fit parameters")
+        params_array, uncerts_array, bic_array = \
+            cube_fitter(downsamp_cube_name, fit_func_simple,
+                        mask_name=None,
+                        npars=4,
+                        args=(),
+                        kwargs={'downsamp_factor': 1,
+                                'min_finite_chan': 30,
+                                "delta_vcent": delta_vcent},
+                        spatial_mask=spat_mask,
+                        err_map=err_map,
+                        vcent_map=vcent,
+                        num_cores=6,
+                        chunks=20000)
 
-    uncerts_hdu = fits.ImageHDU(uncerts_array, vcent.header.copy())
-    uncerts_hdu.header['BUNIT'] = ("", "Simple thick HI fit uncertainty")
+        # Save the parameters
 
-    bics_hdu = fits.ImageHDU(bic_array, vcent.header.copy())
-    bics_hdu.header['BUNIT'] = ("", "Simple thick HI fit BIC")
+        params_hdu = fits.PrimaryHDU(params_array, vcent.header.copy())
+        params_hdu.header['BUNIT'] = ("", "Simple thick HI fit parameters")
 
-    hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
+        uncerts_hdu = fits.ImageHDU(uncerts_array, vcent.header.copy())
+        uncerts_hdu.header['BUNIT'] = ("", "Simple thick HI fit uncertainty")
 
-    if with_vcent_constraint:
-        out_name = "individ_simplethick_HI_fits_5kms_centlimit.fits"
-    else:
-        out_name = "individ_simplethick_HI_fits_80kms_centlimit.fits"
+        bics_hdu = fits.ImageHDU(bic_array, vcent.header.copy())
+        bics_hdu.header['BUNIT'] = ("", "Simple thick HI fit BIC")
 
-    hdu_all.writeto(fourteenB_HI_data_wGBT_path(out_name, no_check=True),
-                    overwrite=True)
+        hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
+
+        if with_vcent_constraint:
+            out_name = "individ_simplethick_HI_fits_5kms_centlimit.fits"
+        else:
+            out_name = "individ_simplethick_HI_fits_80kms_centlimit.fits"
+
+        hdu_all.writeto(fourteenB_HI_data_wGBT_path(out_name, no_check=True),
+                        overwrite=True)
 
 if run_BC:
     pass
