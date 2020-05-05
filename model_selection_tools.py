@@ -133,11 +133,13 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
     # of integrated intensity lost in the thick model
     par = np.array([params_thickHI[2], params_thickHI[3],
                     params_thickHI[1]])
-    mod_thickHI_thinlimit = multigaussian_nolmfit(vels, par)
+    mod_thickHI_thinlimit = multigaussian_nolmfit(vels / 1000., par)
     missing_intint = (mod_thickHI_thinlimit - mod_thickHI)[tau_mask].sum()
 
+    optthin_intint = mod_thickHI_thinlimit[tau_mask].sum()
+
     return (bic_thickHI, bic_multigauss, tau_mask.sum(),
-            Ncomp_region, missing_intint)
+            Ncomp_region, missing_intint, optthin_intint)
 
 
 def compare_optthick_over_cube(cube_name, params_thickHI_name,
