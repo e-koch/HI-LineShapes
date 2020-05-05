@@ -179,7 +179,7 @@ def compare_optthick_over_cube(cube_name, params_thickHI_name,
     # Output array for recalculated BICs
     # Last image is to return the number of points used in the
     # comparison
-    out_bics = np.zeros((5,) + cube.shape[1:]) * np.NaN
+    out_bics = np.zeros((6,) + cube.shape[1:]) * np.NaN
 
     del cube._data
     del cube
@@ -243,8 +243,12 @@ def compare_optthick_over_cube(cube_name, params_thickHI_name,
     # model.
     hdu_miss = fits.ImageHDU(out_bics[4], params_hdr)
 
+    # And the total optically-thin integrated intensity for comparison
+    hdu_optthin = fits.ImageHDU(out_bics[5], params_hdr)
+
     # Record the peak taus for quick access
     hdu_peaktau = fits.ImageHDU(taupeak_map, params_hdr)
 
     return fits.HDUList([hdu_bic_thickHI, hdu_bic_mg, hdu_npts,
-                         hdu_gcomp, hdu_miss, hdu_peaktau])
+                         hdu_gcomp, hdu_miss, hdu_optthin,
+                         hdu_peaktau])
