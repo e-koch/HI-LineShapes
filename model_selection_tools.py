@@ -98,7 +98,7 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
         raise ValueError("tau_min exceeds all tau values.")
 
     if tau_mask.sum(0) < min_pts:
-        return [np.NaN] * 5
+        return [np.NaN] * 6
 
     # chisq_thickHI = np.nansum((spec.value[tau_mask] - mod_thickHI[tau_mask])**2 / noise_val.value**2)
     # chisq_multigauss = np.nansum((spec.value[tau_mask] - mod_multigauss[tau_mask])**2 / noise_val.value**2)
