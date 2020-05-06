@@ -200,8 +200,8 @@ for params in tqdm(zip(tpeaks, tss, sigmas),
                                           min_pts=min_pts,
                                           gausscomp_frac=gausscomp_frac)
 
-        mgauss_BICs_taulim[cur_iter] = out_taulim[0]
-        thick_BICs_taulim[cur_iter] = out_taulim[1]
+        mgauss_BICs_taulim[cur_iter] = out_taulim[1]
+        thick_BICs_taulim[cur_iter] = out_taulim[0]
         npts_taulim[cur_iter] = out_taulim[2]
         ncomps_taulim[cur_iter] = out_taulim[3]
         darkint_taulim[cur_iter] = out_taulim[4]
