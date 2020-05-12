@@ -79,6 +79,8 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
     else:
         vels = vels.to(u.m / u.s).value
 
+    vel_diff = np.abs(vels[1] - vels[0])
+
     mod_multigauss = multigaussian_nolmfit(vels, params_multigauss)
     mod_thickHI = isoturbHI_simple(vels / 1000., params_thickHI[0],
                                    params_thickHI[1],
@@ -134,9 +136,9 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
     par = np.array([params_thickHI[2], params_thickHI[3],
                     params_thickHI[1]])
     mod_thickHI_thinlimit = multigaussian_nolmfit(vels / 1000., par)
-    missing_intint = (mod_thickHI_thinlimit - mod_thickHI)[tau_mask].sum()
+    missing_intint = (mod_thickHI_thinlimit - mod_thickHI)[tau_mask].sum() * vel_diff
 
-    optthin_intint = mod_thickHI_thinlimit[tau_mask].sum()
+    optthin_intint = mod_thickHI_thinlimit[tau_mask].sum() * vel_diff
 
     return (bic_thickHI, bic_multigauss, tau_mask.sum(),
             Ncomp_region, missing_intint, optthin_intint)
