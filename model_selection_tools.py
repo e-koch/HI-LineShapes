@@ -100,7 +100,7 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
         raise ValueError("tau_min exceeds all tau values.")
 
     if tau_mask.sum(0) < min_pts:
-        return [np.NaN] * 6
+        return [np.NaN] * 8
 
     # chisq_thickHI = np.nansum((spec.value[tau_mask] - mod_thickHI[tau_mask])**2 / noise_val.value**2)
     # chisq_multigauss = np.nansum((spec.value[tau_mask] - mod_multigauss[tau_mask])**2 / noise_val.value**2)
@@ -136,12 +136,16 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
     par = np.array([params_thickHI[2], params_thickHI[3],
                     params_thickHI[1]])
     mod_thickHI_thinlimit = multigaussian_nolmfit(vels / 1000., par)
-    missing_intint = (mod_thickHI_thinlimit - mod_thickHI)[tau_mask].sum() * vel_diff
+    missing_intint_taulim = (mod_thickHI_thinlimit - mod_thickHI)[tau_mask].sum() * vel_diff
 
-    optthin_intint = mod_thickHI_thinlimit[tau_mask].sum() * vel_diff
+    optthin_intint_taulim = mod_thickHI_thinlimit[tau_mask].sum() * vel_diff
+
+    missing_intint_total = (mod_thickHI_thinlimit - mod_thickHI).sum() * vel_diff
+    optthin_intint_total = mod_thickHI_thinlimit.sum() * vel_diff
 
     return (bic_thickHI, bic_multigauss, tau_mask.sum(),
-            Ncomp_region, missing_intint, optthin_intint)
+            Ncomp_region, missing_intint_total, optthin_intint_total,
+            missing_intint_taulim, optthin_intint_taulim)
 
 
 def compare_optthick_over_cube(cube_name, params_thickHI_name,

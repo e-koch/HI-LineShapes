@@ -122,6 +122,8 @@ mgauss_BICs_taulim = np.empty(niter * nspec, dtype=float)
 thick_BICs_taulim = np.empty(niter * nspec, dtype=float)
 npts_taulim = np.empty(niter * nspec, dtype=float)
 ncomps_taulim = np.empty(niter * nspec, dtype=float)
+darkint_total = np.empty(niter * nspec, dtype=float)
+optthinint_total = np.empty(niter * nspec, dtype=float)
 darkint_taulim = np.empty(niter * nspec, dtype=float)
 optthinint_taulim = np.empty(niter * nspec, dtype=float)
 
@@ -186,9 +188,9 @@ for params in tqdm(zip(tpeaks, tss, sigmas),
         gausscomp_frac = 0.25
 
         if out0.params['Tpeak'] / out0.params['Ts'] < tau_min:
-            out_taulim = [np.NaN] * 6
+            out_taulim = [np.NaN] * 8
         elif ncomps[cur_iter] == 0.:
-            out_taulim = [np.NaN] * 6
+            out_taulim = [np.NaN] * 8
         else:
             out_taulim = \
                 compare_optthick_residual(spec_obj,
@@ -204,8 +206,10 @@ for params in tqdm(zip(tpeaks, tss, sigmas),
         thick_BICs_taulim[cur_iter] = out_taulim[0]
         npts_taulim[cur_iter] = out_taulim[2]
         ncomps_taulim[cur_iter] = out_taulim[3]
-        darkint_taulim[cur_iter] = out_taulim[4]
-        optthinint_taulim[cur_iter] = out_taulim[5]
+        darkint_total[cur_iter] = out_taulim[4]
+        optthinint_total[cur_iter] = out_taulim[5]
+        darkint_taulim[cur_iter] = out_taulim[6]
+        optthinint_taulim[cur_iter] = out_taulim[7]
 
         cur_iter += 1
 
@@ -218,13 +222,16 @@ tab = Table([np.tile(tpeaks, (nspec, 1)).T.ravel(),
              np.tile(sigmas, (nspec, 1)).T.ravel(),
              thick_BICs, mgauss_BICs, ncomps,
              thick_BICs_taulim, mgauss_BICs_taulim, ncomps_taulim,
-             npts_taulim, darkint_taulim, optthinint_taulim
+             npts_taulim, darkint_total, optthinint_total,
+             darkint_taulim, optthinint_taulim
              ],
             names=['Tpeak', 'Ts', 'sigma',
                    'thick_BIC', 'mgauss_BIC', 'mgauss_ncomps',
                    'thick_BIC_taulim', 'mgauss_BIC_taulim',
                    'mgauss_ncomps_taulim',
-                   'npts_taulim', 'darkint_taulim', 'optthinint_taulim'])
+                   'npts_taulim',
+                   'darkint_total', 'optthinint_total',
+                   'darkint_taulim', 'optthinint_taulim'])
 
 output_name = 'm31_synthetic_thickHI_multigauss_comparison.csv'
 tab.write(osjoin(output_path, output_name), overwrite=True)
