@@ -418,8 +418,8 @@ def remove_offrot_components(params_name,
     bics_hdu = fits.ImageHDU(new_bic_array, vcent.header.copy())
     bics_hdu.header['BUNIT'] = ("", "Gaussian fit BIC")
 
-    hdu_all = fits.HDUList([params_hdu, uncerts_hdu])
-    # hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
+    # hdu_all = fits.HDUList([params_hdu, uncerts_hdu])
+    hdu_all = fits.HDUList([params_hdu, uncerts_hdu, bics_hdu])
 
     if return_mwcomps:
         mwparams_hdu = fits.PrimaryHDU(mwparams_array, vcent.header.copy())
