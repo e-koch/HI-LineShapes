@@ -96,8 +96,8 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
     # Region comparison over the high tau areas
     tau_mask = tau_profile >= tau_min
 
-    if tau_mask.sum(0) == 0:
-        raise ValueError("tau_min exceeds all tau values.")
+    # if tau_mask.sum(0) == 0:
+    #     raise ValueError("tau_min exceeds all tau values.")
 
     if tau_mask.sum(0) < min_pts:
         return [np.NaN] * 8
@@ -185,7 +185,7 @@ def compare_optthick_over_cube(cube_name, params_thickHI_name,
     # Output array for recalculated BICs
     # Last image is to return the number of points used in the
     # comparison
-    out_bics = np.zeros((6,) + cube.shape[1:]) * np.NaN
+    out_bics = np.zeros((8,) + cube.shape[1:]) * np.NaN
 
     del cube._data
     del cube
@@ -210,7 +210,7 @@ def compare_optthick_over_cube(cube_name, params_thickHI_name,
             continue
 
         # I got a weird rounding error. Bump up comparison by epsilon.
-        if taupeak_map[y, x] < tau_min + 1e-3:
+        if taupeak_map[y, x] < tau_min + 1e-2:
             continue
 
         spec = cube_hdu[0].data[:, y, x] * u.K
@@ -252,11 +252,19 @@ def compare_optthick_over_cube(cube_name, params_thickHI_name,
     # And the total optically-thin integrated intensity for comparison
     hdu_optthin = fits.ImageHDU(out_bics[5], params_hdr)
 
+    # Same but limited to only the >tau mask
+    hdu_miss_taulim = fits.ImageHDU(out_bics[6], params_hdr)
+
+    # And the total optically-thin integrated intensity for comparison
+    hdu_optthin_taulim = fits.ImageHDU(out_bics[7], params_hdr)
+
     # Record the peak taus for quick access
     hdu_peaktau = fits.ImageHDU(taupeak_map, params_hdr)
 
     return fits.HDUList([hdu_bic_thickHI, hdu_bic_mg, hdu_npts,
-                         hdu_gcomp, hdu_miss, hdu_optthin,
+                         hdu_gcomp,
+                         hdu_miss, hdu_optthin,
+                         hdu_miss_taulim, hdu_optthin_taulim,
                          hdu_peaktau])
 
 
