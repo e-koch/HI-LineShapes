@@ -64,7 +64,8 @@ np.random.seed(4539803)
 
 # Fit niter spectra at each point in the parameter space.
 # niter = 100000
-niter = 10000
+# niter = 10000
+niter = 20000
 nspec = 10
 
 vel_min = -200 * u.km / u.s
@@ -93,11 +94,12 @@ m33_noise = 2.4 * u.K / np.sqrt(2)
 # tpeaks = np.random.uniform(10., 120., niter)  # K
 tpeaks = np.random.uniform(30., 120., niter)  # K
 
-# tss = np.random.uniform(15., 1500., niter)  # K
+tss = np.random.uniform(15., 8000., niter)  # K
 # Force higher taus to compare
-taus = np.random.uniform(0.5, 3., niter)
+# taus = np.random.uniform(0.5, 3., niter)
+# taus = np.random.uniform(0.01, 3., niter)
 # Then calc the actual Ts
-tss = tpeaks / taus
+# tss = tpeaks / taus
 
 sigmas = np.random.uniform(3., 30., niter)  # km/s
 # sigmas = np.random.uniform(1., 30., niter)  # km/s
@@ -187,7 +189,9 @@ for params in tqdm(zip(tpeaks, tss, sigmas),
         min_pts = 10
         gausscomp_frac = 0.25
 
-        if out0.params['Tpeak'] / out0.params['Ts'] < tau_min:
+        # Dealing with small rounding errors, where the central channel is
+        # evaluated lower than the fit due to the channel size
+        if (out0.params['Tpeak'] / out0.params['Ts']) < (tau_min + 0.01):
             out_taulim = [np.NaN] * 8
         elif ncomps[cur_iter] == 0.:
             out_taulim = [np.NaN] * 8
@@ -233,7 +237,8 @@ tab = Table([np.tile(tpeaks, (nspec, 1)).T.ravel(),
                    'darkint_total', 'optthinint_total',
                    'darkint_taulim', 'optthinint_taulim'])
 
-output_name = 'm31_synthetic_thickHI_multigauss_comparison.csv'
+# output_name = 'm31_synthetic_thickHI_multigauss_comparison.csv'
+output_name = 'm31_synthetic_thickHI_multigauss_comparison_with_lowtau.csv'
 tab.write(osjoin(output_path, output_name), overwrite=True)
 
 
