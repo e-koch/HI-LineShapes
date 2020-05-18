@@ -99,8 +99,21 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
     # if tau_mask.sum(0) == 0:
     #     raise ValueError("tau_min exceeds all tau values.")
 
+    # Also compute the optically-thin limit to estimate amount
+    # of integrated intensity lost in the thick model
+    par = np.array([params_thickHI[2], params_thickHI[3],
+                    params_thickHI[1]])
+    mod_thickHI_thinlimit = multigaussian_nolmfit(vels / 1000., par)
+
+    # Always return the total values
+
+    missing_intint_total = (mod_thickHI_thinlimit - mod_thickHI).sum() * vel_diff
+    optthin_intint_total = mod_thickHI_thinlimit.sum() * vel_diff
+
     if tau_mask.sum(0) < min_pts:
-        return [np.NaN] * 8
+        return [np.NaN, np.NaN, np.NaN, np.NaN,
+                missing_intint_total, optthin_intint_total,
+                np.NaN, np.NaN]
 
     # chisq_thickHI = np.nansum((spec.value[tau_mask] - mod_thickHI[tau_mask])**2 / noise_val.value**2)
     # chisq_multigauss = np.nansum((spec.value[tau_mask] - mod_multigauss[tau_mask])**2 / noise_val.value**2)
@@ -131,17 +144,10 @@ def compare_optthick_residual(spec, params_thickHI, params_multigauss,
     bic_multigauss = recalculate_bic(spec, mod_multigauss, noise_val,
                                      Ncomp_region * 3, mask=tau_mask)
 
-    # Also compute the optically-thin limit to estimate amount
-    # of integrated intensity lost in the thick model
-    par = np.array([params_thickHI[2], params_thickHI[3],
-                    params_thickHI[1]])
-    mod_thickHI_thinlimit = multigaussian_nolmfit(vels / 1000., par)
     missing_intint_taulim = (mod_thickHI_thinlimit - mod_thickHI)[tau_mask].sum() * vel_diff
 
     optthin_intint_taulim = mod_thickHI_thinlimit[tau_mask].sum() * vel_diff
 
-    missing_intint_total = (mod_thickHI_thinlimit - mod_thickHI).sum() * vel_diff
-    optthin_intint_total = mod_thickHI_thinlimit.sum() * vel_diff
 
     return (bic_thickHI, bic_multigauss, tau_mask.sum(),
             Ncomp_region, missing_intint_total, optthin_intint_total,

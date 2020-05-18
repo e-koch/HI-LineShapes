@@ -94,12 +94,12 @@ m33_noise = 2.4 * u.K / np.sqrt(2)
 # tpeaks = np.random.uniform(10., 120., niter)  # K
 tpeaks = np.random.uniform(30., 120., niter)  # K
 
-tss = np.random.uniform(15., 8000., niter)  # K
+# tss = np.random.uniform(15., 8000., niter)  # K
 # Force higher taus to compare
 # taus = np.random.uniform(0.5, 3., niter)
-# taus = np.random.uniform(0.01, 3., niter)
+taus = np.random.uniform(0.01, 3., niter)
 # Then calc the actual Ts
-# tss = tpeaks / taus
+tss = tpeaks / taus
 
 sigmas = np.random.uniform(3., 30., niter)  # km/s
 # sigmas = np.random.uniform(1., 30., niter)  # km/s
@@ -191,9 +191,9 @@ for params in tqdm(zip(tpeaks, tss, sigmas),
 
         # Dealing with small rounding errors, where the central channel is
         # evaluated lower than the fit due to the channel size
-        if (out0.params['Tpeak'] / out0.params['Ts']) < (tau_min + 0.01):
-            out_taulim = [np.NaN] * 8
-        elif ncomps[cur_iter] == 0.:
+        # if (out0.params['Tpeak'] / out0.params['Ts']) < (tau_min + 0.01):
+        #     out_taulim = [np.NaN] * 8
+        if ncomps[cur_iter] == 0.:
             out_taulim = [np.NaN] * 8
         else:
             out_taulim = \
