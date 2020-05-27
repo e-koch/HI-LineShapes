@@ -4,7 +4,7 @@ Implement the optically-thick HI model from Braun 2009.
 '''
 
 import numpy as np
-from lmfit import Model, Parameters, Minimizer, report_fit
+from lmfit import Parameters, Minimizer, report_fit
 import astropy.units as u
 import matplotlib.pyplot as plt
 from spectral_cube import OneDSpectrum
@@ -253,4 +253,7 @@ def fit_func_simple(spec, noise_val,
                               else np.NaN
                               for par in out.params.values()])
 
-    return params_array, uncerts_array, out.bic
+    # Want to return a range of fit statistics.
+    fit_stats = np.array([out.bic, out.aic, out.redchi])
+
+    return params_array, uncerts_array, fit_stats

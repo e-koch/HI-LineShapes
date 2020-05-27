@@ -92,6 +92,7 @@ if run_C:
             cube_fitter(downsamp_cube_name, fit_func_simple,
                         mask_name=None,
                         npars=4,
+                        nfit_stats=3,
                         args=(),
                         kwargs={'downsamp_factor': 1,
                                 'min_finite_chan': 30,
