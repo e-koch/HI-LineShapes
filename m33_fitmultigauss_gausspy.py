@@ -24,12 +24,17 @@ exec(compile(open(constants_script, "rb").read(), constants_script, 'exec'))
 model_script = os.path.join(repo_path, "gaussian_model.py")
 exec(compile(open(model_script, "rb").read(), model_script, 'exec'))
 
-run_C = False
-run_BC = True
+modsel_script = os.path.join(repo_path, "model_selection_tools.py")
+exec(compile(open(modsel_script, "rb").read(), modsel_script, 'exec'))
 
-run_fit = True
-run_neighbcheck = True
-run_writemodel = True
+
+run_C = True
+run_BC = False
+
+run_fit = False
+run_neighbcheck = False
+run_writemodel = False
+run_component_selection = True
 
 if run_C:
     # 14B cube
@@ -134,6 +139,9 @@ if run_C:
 
         hdu_all.writeto(params_name, overwrite=True)
 
+        hdu_all.close()
+        del hdu_all
+
     # Stage 2: Do a neighbourhood check to ensure smoother fit solutions.
     # Now we'll loop through the fits to check against the 3x3 neighbourhood.
     # This should even out nearby spectral fits and the number of components.
@@ -173,6 +181,86 @@ if run_C:
                       chunk_size=80000,
                       save_sep_components=False)
 
+    # Make selection cuts for:
+    # 1. MW foreground
+    # 2. Wide and faint components.
+    # 3. Everthing but the brightest peak
+    if run_component_selection:
+
+        # 1. MW foreground
+
+        params_name_nomw = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck2_nomw.fits", no_check=True)
+        params_name_mw = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck2_mw.fits", no_check=True)
+
+        hdu_nomw, hdu_mw = remove_offrot_components(params_name_rev2,
+                                                    vcent_name,
+                                                    downsamp_cube_name,
+                                                    err_map,
+                                                    delta_v=50 * u.km / u.s,
+                                                    logic_func=np.logical_and,
+                                                    mwhi_mask=None,
+                                                    return_mwcomps=True)
+
+        hdu_nomw.writeto(params_name_nomw, overwrite=True)
+        hdu_mw.writeto(params_name_mw, overwrite=True)
+
+        downsamp_cube_name_nomw = f"{downsamp_cube_name.rstrip('.fits')}_MWsub.fits"
+
+        overwrite = True
+        if overwrite and os.path.exists(downsamp_cube_name_nomw):
+            os.system(f"rm {downsamp_cube_name_nomw}")
+
+        # Make a cube version without the "MW" components
+        subtract_components(downsamp_cube_name,
+                            params_name_mw,
+                            downsamp_cube_name_nomw,
+                            chunk_size=20000)
+
+        # 2. Wide and faint components.
+        params_name_bright = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck2_bright.fits", no_check=True)
+        params_name_faint = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck2_faint.fits", no_check=True)
+
+        hdu_bright, hdu_faint = \
+            remove_faint_components(params_name_rev2,
+                                    noise_val,
+                                    min_lwidth_sub=25 * u.km / u.s,
+                                    max_amp_sub_sigma=3.,
+                                    logic_func=np.logical_or)
+
+        hdu_bright.writeto(params_name_bright, overwrite=True)
+        hdu_faint.writeto(params_name_faint, overwrite=True)
+
+        downsamp_cube_name_nofaint = f"{downsamp_cube_name.rstrip('.fits')}_faintsub.fits"
+
+        overwrite = True
+        if overwrite and os.path.exists(downsamp_cube_name_nofaint):
+            os.system(f"rm {downsamp_cube_name_nofaint}")
+
+        # Make a cube version without the "MW" components
+        subtract_components(downsamp_cube_name,
+                            params_name_faint,
+                            downsamp_cube_name_nofaint,
+                            chunk_size=20000)
+
+        # 3. Separate distinct and blended components
+        # Use the non-MW components
+        params_name_distinct = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck2_noMW_distinct.fits", no_check=True)
+        params_name_blend = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck2_noMW_blend.fits", no_check=True)
+
+        hdu_distinct, hdu_blend = \
+            find_distinct_features(params_name_nomw,
+                                   downsamp_cube_name,
+                                   noise_val,
+                                   return_blendcomps=True,
+                                   nsigma=5.,
+                                   max_chan_diff=3,
+                                   secderiv_fraction=0.75)
+
+        hdu_distinct.writeto(params_name_distinct, overwrite=True)
+        hdu_blend.writeto(params_name_blend, overwrite=True)
+
+        # cube_name_noblend = f"{cube_name.rstrip('.fits')}_blendsub.fits"
+
 
 if run_BC:
     # 14B+17B cube
@@ -204,7 +292,9 @@ if run_BC:
 
     # Set max number of gaussians to something ridiculous.
     # Just so we don't have a failure putting into the output array
-    max_comp = 30
+    # First time fitting there was max of 5. Noise is higher here
+    # so don't expect to be able to detect a lot of faint emission
+    max_comp = 8
 
     err_map = noise_val / pb_plane
 
@@ -243,6 +333,11 @@ if run_BC:
                         chunks=20000)
 
         # Save the parameters
+        # Cut to max number of components
+        max_comp = np.isfinite(params_array).sum(0).max() // 3
+
+        params_array = params_array[:3 * max_comp]
+        uncerts_array = uncerts_array[:3 * max_comp]
 
         params_hdu = fits.PrimaryHDU(params_array, vcent.header.copy())
         params_hdu.header['BUNIT'] = ("", "Gaussian fit parameters")
@@ -257,6 +352,12 @@ if run_BC:
 
         hdu_all.writeto(params_name, overwrite=True)
 
+        # Delete the parameter arrays to recoup memory
+        del params_array, uncerts_array, bic_array
+
+        hdu_all.close()
+        del hdu_all
+
     # Stage 2: Do a neighbourhood check to ensure smoother fit solutions.
     # Now we'll loop through the fits to check against the 3x3 neighbourhood.
     # This should even out nearby spectral fits and the number of components.
@@ -266,7 +367,7 @@ if run_BC:
     if run_neighbcheck:
         hdu_all_revised = neighbourhood_fit_comparison(cube_name,
                                                        params_name,
-                                                       chunk_size=80000,
+                                                       chunk_size=10000,
                                                        diff_bic=10,
                                                        err_map=err_map,
                                                        use_ncomp_check=True,
@@ -274,15 +375,21 @@ if run_BC:
 
         hdu_all_revised.writeto(params_name_rev, overwrite=True)
 
+        hdu_all_revised.close()
+        del hdu_all_revised
+
         hdu_all_revised2 = neighbourhood_fit_comparison(cube_name,
                                                         params_name_rev,
-                                                        chunk_size=80000,
+                                                        chunk_size=10000,
                                                         diff_bic=10,
                                                         err_map=err_map,
                                                         use_ncomp_check=True,
                                                         reverse_direction=True)
 
         hdu_all_revised2.writeto(params_name_rev2, overwrite=True)
+
+        hdu_all_revised2.close()
+        del hdu_all_revised2
 
     # Make a model cube from the last fit.
     model_outname = seventeenB_HI_data_1kms_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck2_model.fits", no_check=True)

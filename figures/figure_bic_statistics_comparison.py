@@ -40,7 +40,7 @@ run_m33 = False
 if run_m31:
 
     # m31_multigauss_name = fifteenA_HI_BCtaper_04kms_data_wEBHIS_path("individ_multigaussian_gausspy_fits.fits")
-    m31_multigauss_name = fifteenA_HI_BCtaper_04kms_data_wEBHIS_path("individ_multigaussian_gausspy_fits_neighbcheck.fits")
+    m31_multigauss_name = fifteenA_HI_BCtaper_04kms_data_wEBHIS_path("individ_multigaussian_gausspy_fits_neighbcheck2.fits")
     m31_multigauss_hdu = fits.open(m31_multigauss_name)
 
     m31_ngauss = np.isfinite(m31_multigauss_hdu[0].data).sum(0) // 3
@@ -601,7 +601,7 @@ if run_m31:
 # M33
 if run_m33:
 
-    m33_multigauss_name = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck.fits")
+    m33_multigauss_name = fourteenB_HI_data_wGBT_path("individ_multigaussian_gausspy_fits_neighbcheck2.fits")
     m33_multigauss_hdu = fits.open(m33_multigauss_name)
 
     m33_ngauss = np.isfinite(m33_multigauss_hdu[0].data).sum(0) // 3

@@ -9,6 +9,7 @@ from astropy.io import fits
 import numpy as np
 import scipy.ndimage as nd
 import os
+import astropy.units as u
 
 osjoin = os.path.join
 
