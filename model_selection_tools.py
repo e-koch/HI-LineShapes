@@ -620,90 +620,18 @@ def find_distinct_features(params_name,
         params = params_array[:3 * ncomp, y, x]
         uncerts = uncert_array[:3 * ncomp, y, x]
 
-        mod_spec = multigaussian_nolmfit(vels, params)
+        noise_threshold = nsigma * noise_val
 
-        if mod_spec.max() <= nsigma * noise_val.value:
-            continue
-
-        bright_regions = np.where(mod_spec > nsigma * noise_val.value)[0]
-
-        diffs = np.diff(bright_regions)
-
-        bright_regions_split = np.array_split(bright_regions,
-                                              np.where(diffs != 1)[0] + 1)
-
-        if len(bright_regions_split) == 0:
-            raise ValueError("No valid regions found. But not skipped.")
-
-        # Pick the brightest region:
-        for i, region in enumerate(bright_regions_split):
-
-            if len(region) == 0:
-                continue
-
-            max_val_reg = np.nanmax(mod_spec[region])
-
-            if i == 0:
-                max_val = max_val_reg
-                regnum = 0
-                continue
-
-            if max_val_reg > max_val:
-                max_val = max_val_reg
-                regnum = i
-
-        bright_region = bright_regions_split[regnum]
-
-        # Identify peaks in total model
-        deriv1 = np.gradient(mod_spec)
-        deriv2 = np.gradient(deriv1)
-        deriv3 = np.gradient(deriv2)
-
-        zeros = np.abs(np.diff(np.sign(deriv3))) > 0
-
-        mask_peaks = np.logical_and(deriv2[bright_region] < 0.,
-                                    zeros[bright_region])
-        peaks = np.where(mask_peaks)[0] + bright_region[0] + 1
-
-        cent_chans = np.array([cube.closest_spectral_channel(cent * u.m / u.s)
-                               for cent in params[1::3]])
-
-        # Determine a peaks independence by the ratio of the 2nd derivative
-        # of that component vs. the whole model.
-        keeps = []
-
-        for peak in peaks:
-
-            diff_chan = np.abs(cent_chans - peak)
-
-            min_diff = diff_chan.min()
-
-            if min_diff > max_chan_diff:
-                continue
-
-            match = diff_chan.argmin()
-
-            mod_comp = multigaussian_nolmfit(vels, params[3 * match:3 * match + 3])
-
-            diff2_comp = np.gradient(np.gradient(mod_comp))
-
-            # Now check the ratio between the 2nd deriv minima
-            diff2_frac = deriv2[peak] / diff2_comp[cent_chans[match]]
-
-            if diff2_frac >= secderiv_fraction:
-                keeps.append(match)
-
-        # Could have duplicates. Fail here is this happens so I can check
-        if len(np.unique(keeps)) != len(keeps):
-            ValueError("Duplicates shouldn't really happen!"
-                       " You should check this.")
+        # Do the split between distinct and blended.
+        keeps, blends = distinct_vs_blended(params, noise_threshold, vels,
+                                            max_chan_diff=max_chan_diff,
+                                            secderiv_fraction=secderiv_fraction)
 
         for k, comp in enumerate(keeps):
             keep_params_array[3 * k:3 * k + 3, y, x] = params[3 * comp:3 * comp + 3]
             keep_uncert_array[3 * k:3 * k + 3, y, x] = uncerts[3 * comp:3 * comp + 3]
 
         if return_blendcomps:
-            blends = list(set(range(ncomp)) - set(keeps))
 
             for k, comp in enumerate(blends):
                 blend_params_array[3 * k:3 * k + 3, y, x] = params[3 * comp:3 * comp + 3]
@@ -739,6 +667,103 @@ def find_distinct_features(params_name,
         return hdu_all, hdu_mw
 
     return hdu_all
+
+
+def distinct_vs_blended(params, noise_threshold, vels,
+                        max_chan_diff=3, secderiv_fraction=0.75):
+    '''
+    Define distinct vs. blended Gaussian components from a set of components.
+    "Distinct" is defined by matching the ratio of 2nd derivative minima between the
+    full model and each component. A distinct peak will have a 2nd moment that is similar
+    to the individual component in the complete model.
+    '''
+
+    params = params.copy
+    params[params == 0.0] = np.NaN
+
+    ncomp = np.isfinite(params).sum(0) // 3
+
+    mod_spec = multigaussian_nolmfit(vels, params)
+
+    if mod_spec.max() <= noise_threshold.value:
+        continue
+
+    bright_regions = np.where(mod_spec > noise_threshold.value)[0]
+
+    diffs = np.diff(bright_regions)
+
+    bright_regions_split = np.array_split(bright_regions,
+                                          np.where(diffs != 1)[0] + 1)
+
+    if len(bright_regions_split) == 0:
+        raise ValueError("No valid regions found. But not skipped.")
+
+    # Pick the brightest region:
+    for i, region in enumerate(bright_regions_split):
+
+        if len(region) == 0:
+            continue
+
+        max_val_reg = np.nanmax(mod_spec[region])
+
+        if i == 0:
+            max_val = max_val_reg
+            regnum = 0
+            continue
+
+        if max_val_reg > max_val:
+            max_val = max_val_reg
+            regnum = i
+
+    bright_region = bright_regions_split[regnum]
+
+    # Identify peaks in total model
+    deriv1 = np.gradient(mod_spec)
+    deriv2 = np.gradient(deriv1)
+    deriv3 = np.gradient(deriv2)
+
+    zeros = np.abs(np.diff(np.sign(deriv3))) > 0
+
+    mask_peaks = np.logical_and(deriv2[bright_region] < 0.,
+                                zeros[bright_region])
+    peaks = np.where(mask_peaks)[0] + bright_region[0] + 1
+
+    cent_chans = np.array([np.argmin(np.abs(vels - cent))
+                           for cent in params[1::3]])
+
+    # Determine a peaks independence by the ratio of the 2nd derivative
+    # of that component vs. the whole model.
+    keeps = []
+
+    for peak in peaks:
+
+        diff_chan = np.abs(cent_chans - peak)
+
+        min_diff = diff_chan.min()
+
+        if min_diff > max_chan_diff:
+            continue
+
+        match = diff_chan.argmin()
+
+        mod_comp = multigaussian_nolmfit(vels, params[3 * match:3 * match + 3])
+
+        diff2_comp = np.gradient(np.gradient(mod_comp))
+
+        # Now check the ratio between the 2nd deriv minima
+        diff2_frac = deriv2[peak] / diff2_comp[cent_chans[match]]
+
+        if diff2_frac >= secderiv_fraction:
+            keeps.append(match)
+
+    # Could have duplicates. Fail here is this happens so I can check
+    if len(np.unique(keeps)) != len(keeps):
+        ValueError("Duplicates shouldn't really happen!"
+                   " You should check this.")
+
+    blends = list(set(range(ncomp)) - set(keeps))
+
+    return keeps, blends
 
 
 def find_bright_narrow(params_name,
