@@ -670,7 +670,8 @@ def find_distinct_features(params_name,
 
 
 def distinct_vs_blended(params, noise_threshold, vels,
-                        max_chan_diff=3, secderiv_fraction=0.75):
+                        max_chan_diff=3, secderiv_fraction=0.75,
+                        test_print=False):
     '''
     Define distinct vs. blended Gaussian components from a set of components.
     "Distinct" is defined by matching the ratio of 2nd derivative minima between the
@@ -678,15 +679,17 @@ def distinct_vs_blended(params, noise_threshold, vels,
     to the individual component in the complete model.
     '''
 
-    params = params.copy
+    params = params.copy()
     params[params == 0.0] = np.NaN
 
     ncomp = np.isfinite(params).sum(0) // 3
 
-    mod_spec = multigaussian_nolmfit(vels, params)
+    params = params[:3 * ncomp]
+
+    mod_spec = multigaussian_nolmfit(vels.value, params)
 
     if mod_spec.max() <= noise_threshold.value:
-        continue
+        return [], list(range(ncomp))
 
     bright_regions = np.where(mod_spec > noise_threshold.value)[0]
 
@@ -724,11 +727,17 @@ def distinct_vs_blended(params, noise_threshold, vels,
 
     zeros = np.abs(np.diff(np.sign(deriv3))) > 0
 
-    mask_peaks = np.logical_and(deriv2[bright_region] < 0.,
-                                zeros[bright_region])
+    mask_peaks = np.logical_and(deriv2[bright_region[:-1]] < 0.,
+                                zeros[bright_region[:-1]])
+
+    if test_print:
+        print(f"Negative 2nd Derivative: {np.where(deriv2[bright_region[:-1]] < 0.)}")
+        print(f"Zero crossing: {np.where(zeros[bright_region[:-1]])}")
+        print(f"Mask peaks: {np.where(mask_peaks)}")
+
     peaks = np.where(mask_peaks)[0] + bright_region[0] + 1
 
-    cent_chans = np.array([np.argmin(np.abs(vels - cent))
+    cent_chans = np.array([np.argmin(np.abs(vels.value - cent))
                            for cent in params[1::3]])
 
     # Determine a peaks independence by the ratio of the 2nd derivative
@@ -741,12 +750,17 @@ def distinct_vs_blended(params, noise_threshold, vels,
 
         min_diff = diff_chan.min()
 
+        if test_print:
+            print(f"Peak {peak} channel difference {min_diff}")
+
         if min_diff > max_chan_diff:
+            if test_print:
+                print(f"Peak {peak} exceeds {max_chan_diff}. Skipping.")
             continue
 
         match = diff_chan.argmin()
 
-        mod_comp = multigaussian_nolmfit(vels, params[3 * match:3 * match + 3])
+        mod_comp = multigaussian_nolmfit(vels.value, params[3 * match:3 * match + 3])
 
         diff2_comp = np.gradient(np.gradient(mod_comp))
 
@@ -754,6 +768,8 @@ def distinct_vs_blended(params, noise_threshold, vels,
         diff2_frac = deriv2[peak] / diff2_comp[cent_chans[match]]
 
         if diff2_frac >= secderiv_fraction:
+            if test_print:
+                print(f"Peak {peak} with fraction {diff2_frac}")
             keeps.append(match)
 
     # Could have duplicates. Fail here is this happens so I can check
