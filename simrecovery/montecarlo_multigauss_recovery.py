@@ -196,13 +196,36 @@ for it in tqdm(range(niter),
 
         ncomps_fit[cur_iter] = np.isfinite(out[0]).sum() // 3
 
-        mgauss_fit_params[it] = out[0]
-        mgauss_fit_uncerts[it] = out[1]
+        mgauss_fit_params[cur_iter] = out[0]
+        mgauss_fit_uncerts[cur_iter] = out[1]
 
         cur_iter += 1
 
 pool.close()
 pool.join()
+
+# Assign separate arrays for distinct vs. blended components
+
+distinct_act = np.zeros((niter, ncomp_max), dtype=bool)
+
+for i, pars in enumerate(tqdm(mgauss_act_params)):
+
+    distinct, blend = distinct_vs_blended(pars, m31_noise * 3, vels.to(u.m / u.s),
+                                          max_chan_diff=3,
+                                          secderiv_fraction=0.75)
+
+    distinct_act[i][distinct] = True
+
+
+distinct_fit = np.zeros((niter * nspec, ncomp_max_fitter), dtype=bool)
+
+for i, pars in enumerate(tqdm(mgauss_fit_params)):
+
+    distinct, blend = distinct_vs_blended(pars, m31_noise * 3, vels,
+                                          max_chan_diff=3,
+                                          secderiv_fraction=0.75)
+
+    distinct_fit[i][distinct] = True
 
 # Convert list of results into a table and save as a CSV
 
@@ -220,5 +243,7 @@ data_save_file = "multigauss_synthetic_fitting_tests.npz"
 
 np.savez_compressed(f"{output_path}/{data_save_file}",
                     mgauss_act_params=mgauss_act_params,
+                    distinct_act=distinct_act,
                     mgauss_fit_params=mgauss_fit_params,
-                    mgauss_fit_uncerts=mgauss_fit_uncerts,)
+                    mgauss_fit_uncerts=mgauss_fit_uncerts,
+                    distinct_fit=distinct_fit)
