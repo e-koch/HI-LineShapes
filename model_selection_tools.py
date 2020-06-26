@@ -684,6 +684,13 @@ def distinct_vs_blended(params, noise_threshold, vels,
 
     ncomp = np.isfinite(params).sum(0) // 3
 
+    if ncomp == 0:
+        return [], []
+
+    # If there's one component, it much be distinct.
+    if ncomp == 1:
+        return [0], []
+
     params = params[:3 * ncomp]
 
     mod_spec = multigaussian_nolmfit(vels.value, params)
