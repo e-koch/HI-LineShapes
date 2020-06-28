@@ -680,7 +680,7 @@ def distinct_vs_blended(params, noise_threshold, vels,
     '''
 
     params = params.copy()
-    params[params == 0.0] = np.NaN
+    # params[params == 0.0] = np.NaN
 
     ncomp = np.isfinite(params).sum(0) // 3
 
@@ -709,21 +709,24 @@ def distinct_vs_blended(params, noise_threshold, vels,
         raise ValueError("No valid regions found. But not skipped.")
 
     # Pick the brightest region:
-    for i, region in enumerate(bright_regions_split):
+    if len(bright_regions_split) == 1:
+        regnum = 0
+    else:
+        for i, region in enumerate(bright_regions_split):
 
-        if len(region) == 0:
-            continue
+            if len(region) == 0:
+                continue
 
-        max_val_reg = np.nanmax(mod_spec[region])
+            max_val_reg = np.nanmax(mod_spec[region])
 
-        if i == 0:
-            max_val = max_val_reg
-            regnum = 0
-            continue
+            if i == 0:
+                max_val = max_val_reg
+                regnum = 0
+                continue
 
-        if max_val_reg > max_val:
-            max_val = max_val_reg
-            regnum = i
+            if max_val_reg > max_val:
+                max_val = max_val_reg
+                regnum = i
 
     bright_region = bright_regions_split[regnum]
 

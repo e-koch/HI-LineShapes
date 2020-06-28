@@ -210,7 +210,10 @@ distinct_act = np.zeros((niter, ncomp_max), dtype=bool)
 
 for i, pars in enumerate(tqdm(mgauss_act_params)):
 
-    distinct, blend = distinct_vs_blended(pars, m31_noise * 3, vels.to(u.m / u.s),
+    pars = pars.copy()
+    pars[pars == 0.0] = np.NaN
+
+    distinct, blend = distinct_vs_blended(pars, m31_noise * 3, vels.to(u.km / u.s),
                                           max_chan_diff=3,
                                           secderiv_fraction=0.75)
 
@@ -221,7 +224,10 @@ distinct_fit = np.zeros((niter * nspec, ncomp_max_fitter), dtype=bool)
 
 for i, pars in enumerate(tqdm(mgauss_fit_params)):
 
-    distinct, blend = distinct_vs_blended(pars, m31_noise * 3, vels,
+    if np.isnan(pars).all():
+        continue
+
+    distinct, blend = distinct_vs_blended(pars, m31_noise * 3, vels.to(u.m / u.s),
                                           max_chan_diff=3,
                                           secderiv_fraction=0.75)
 
