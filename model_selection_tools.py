@@ -804,3 +804,71 @@ def find_bright_narrow(params_name,
     intensity is a significant fraction of the brightest single peak.
     '''
     pass
+
+
+def match_components(vels, params1, params2, min_overlap_deviation=0.05,
+                     test_print=False):
+    '''
+    Given two sets of Gaussian component parameters, match components based on
+    their overlapping areas.
+
+    Components in `params1` are considered to be the true parameters and components.
+
+
+    Parameters
+    ----------
+    vels : numpy.ndarray
+        Velocity in m/s.
+
+    '''
+
+    def gaussian_overlap(vels, param1, param2):
+        '''
+        Return whether 2 Gaussians overlap.
+        '''
+
+        comp1 = gaussian(vels, param1[0], param1[1], param1[2])
+        comp2 = gaussian(vels, param2[0], param2[1], param2[2])
+
+        # return 1. - np.abs(comp1 - comp2).sum() / (comp1 + comp2).sum()
+        return np.abs(comp1 - comp2).sum() / comp1.sum()
+
+    ncomp1 = np.isfinite(params1).sum() // 3
+    ncomp2 = np.isfinite(params2).sum() // 3
+
+    matches = np.array([False] * ncomp1)
+
+    matched_order = np.array([9999] * ncomp1)
+
+    has_matched = np.array([False] * ncomp2)
+
+    for i in range(ncomp1):
+        param1_i = params1[3 * i: 3 * i + 3]
+
+        for j in range(ncomp2):
+
+            # One match per component
+            if has_matched[j]:
+                if test_print:
+                    print(f"Already matched component {j}")
+                continue
+
+            param2_j = params2[3 * j: 3 * j + 3]
+
+            overlap_diff_ij = gaussian_overlap(vels, param1_i, param2_j)
+
+            if test_print:
+                print(f"Overlap between {i} and {j}: {overlap_diff_ij}")
+
+            # If within deviation gap, allow these components to be matched.
+            if overlap_diff_ij <= min_overlap_deviation:
+
+                if test_print:
+                    print(f"Matched {i} and {j}.")
+
+                matches[i] = True
+                matched_order[i] = j
+
+                break
+
+    return matches, matched_order
