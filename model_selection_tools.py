@@ -871,4 +871,12 @@ def match_components(vels, params1, params2, min_overlap_deviation=0.05,
 
                 break
 
-    return matches, matched_order
+    # Return the actual component parameters that were matched, too
+    matched_params = []
+
+    for match_i in np.where(matches)[0]:
+        matched_params.append(params1[3 * match_i: 3 * match_i + 3])
+
+    matched_params = np.asarray(matched_params).ravel()
+
+    return matches, matched_order, matched_params
