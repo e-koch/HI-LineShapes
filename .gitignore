@@ -5,3 +5,5 @@ __pycache__
 figures/png
 figures/pdf
 *.ipynb_checkpoints
+figures/*backup.ipynb
+.vscode
