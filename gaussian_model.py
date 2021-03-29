@@ -304,7 +304,7 @@ def fit_multigaussian(spec,
                          fcn_args=(xfit, xfit_upsamp, yfit,
                                    err if err is not None else 1.,
                                    discrete_fitter),
-                         maxfev=vels.size * 1000)
+                         max_nfev=vels.size * 1000)
 
         out = mini.leastsq()
         # out = mini.minimize(method='differential_evolution')
@@ -692,7 +692,7 @@ def refit_multigaussian(spec, init_params,
                          fcn_args=(xfit, xfit_upsamp, yfit,
                                    err if err is not None else 1.,
                                    discrete_fitter),
-                         maxfev=vels.size * 1000)
+                         max_nfev=vels.size * 1000)
 
         out = mini.leastsq()
 
@@ -753,7 +753,7 @@ def neighbourhood_fit_comparison(cube_name, params_name, chunk_size=80000,
 
         params_array = params_hdu[0].data
         uncerts_array = params_hdu[1].data
-        bic_array = params_hdu[2].data
+        bic_array = params_hdu[2].data.squeeze()
 
     ncomp_array = np.isfinite(params_array).sum(0) // 3
 

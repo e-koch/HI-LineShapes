@@ -161,7 +161,7 @@ def fit_isoturbHI_model_simple(vels, spec, vcent, delta_vcent=5 * u.km / u.s,
 
     try:
         mini = Minimizer(residual, pfit, fcn_args=fcn_args,
-                         maxfev=vels.size * 1000,
+                         max_nfev=vels.size * 1000,
                          nan_policy='omit')
 
         out = mini.leastsq()
@@ -171,7 +171,7 @@ def fit_isoturbHI_model_simple(vels, spec, vcent, delta_vcent=5 * u.km / u.s,
     if use_emcee:
         mini = Minimizer(residual, out.params,
                          fcn_args=fcn_args,
-                         maxfev=vels.size * 1000)
+                         max_nfev=vels.size * 1000)
         out = mini.emcee(**emcee_kwargs)
 
     if verbose:
