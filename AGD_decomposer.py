@@ -1109,7 +1109,7 @@ def AGD_loop(spec, errors,
                                              max_cent=dct['max_cent'])
             result2 = lmfit_minimize(objective_leastsq, lmfit_params,
                                      method='leastsq',
-                                     maxfev=int(1e4) * spec.size)
+                                     max_nfev=int(1e4) * spec.size)
 
             params_fit = vals_vec_from_lmfit(result2.params)
             params_errs = errs_vec_from_lmfit(result2.params)
