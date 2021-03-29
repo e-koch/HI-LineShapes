@@ -7,3 +7,5 @@ figures/pdf
 *.ipynb_checkpoints
 figures/*backup.ipynb
 .vscode
+*workspace
+*.csv
