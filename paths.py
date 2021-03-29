@@ -32,6 +32,10 @@ elif 'ewk-laptop' in socket.gethostname():
     root = os.path.expanduser("~/ownCloud/project_code/ThickHIFitting/")
     m31_data_path = os.path.expanduser("~/storage/M31")
     m33_data_path = os.path.expanduser("~/storage/M33")
+elif 'SI38' in socket.gethostname():
+    root = os.path.expanduser("~/ownCloud/project_code/ThickHIFitting/")
+    m31_data_path = os.path.expanduser("~/storage/M31")
+    m33_data_path = os.path.expanduser("~/storage/M33")
 
 
 # M31 data paths
