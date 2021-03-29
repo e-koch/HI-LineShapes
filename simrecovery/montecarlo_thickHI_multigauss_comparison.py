@@ -13,6 +13,7 @@ import numpy as np
 from lmfit import Parameters
 from tqdm import tqdm
 
+# https://github.com/e-koch/CubeAnalysis/blob/master/cube_analysis/spectral_fitting/discrete_sampler.pyx
 from cube_analysis.spectral_fitting import sample_at_channels
 
 osjoin = os.path.join
@@ -63,9 +64,7 @@ def generate_spectra(niter, Tp, Ts, sigma, noise_std, vcent=0 * u.km / u.s,
 np.random.seed(4539803)
 
 # Fit niter spectra at each point in the parameter space.
-# niter = 100000
-# niter = 10000
-niter = 20000
+niter = 100000
 nspec = 10
 
 vel_min = -200 * u.km / u.s
@@ -129,6 +128,7 @@ optthinint_total = np.empty(niter * nspec, dtype=float)
 darkint_taulim = np.empty(niter * nspec, dtype=float)
 optthinint_taulim = np.empty(niter * nspec, dtype=float)
 
+nsigma_peak = np.empty(niter * nspec, dtype=float)
 
 cur_iter = 0
 
@@ -141,6 +141,7 @@ for params in tqdm(zip(tpeaks, tss, sigmas),
     for spec in generate_spectra(nspec, params[0], params[1], params[2],
                                  m31_noise):
 
+        nsigma_peak[cur_iter] = spec.max().value / m31_noise.value
         # Fit the thickHI model for comparison
         out0 = fit_isoturbHI_model_simple(vels, spec,
                                           0.0 * u.km / u.s,
@@ -227,15 +228,15 @@ tab = Table([np.tile(tpeaks, (nspec, 1)).T.ravel(),
              thick_BICs, mgauss_BICs, ncomps,
              thick_BICs_taulim, mgauss_BICs_taulim, ncomps_taulim,
              npts_taulim, darkint_total, optthinint_total,
-             darkint_taulim, optthinint_taulim
-             ],
+             darkint_taulim, optthinint_taulim,
+             nsigma_peak],
             names=['Tpeak', 'Ts', 'sigma',
                    'thick_BIC', 'mgauss_BIC', 'mgauss_ncomps',
                    'thick_BIC_taulim', 'mgauss_BIC_taulim',
                    'mgauss_ncomps_taulim',
                    'npts_taulim',
                    'darkint_total', 'optthinint_total',
-                   'darkint_taulim', 'optthinint_taulim'])
+                   'darkint_taulim', 'optthinint_taulim', 'peak_SNR'])
 
 # output_name = 'm31_synthetic_thickHI_multigauss_comparison.csv'
 output_name = 'm31_synthetic_thickHI_multigauss_comparison_with_lowtau.csv'
